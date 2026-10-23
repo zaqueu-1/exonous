@@ -243,13 +243,13 @@ test('a dev checkout refuses to touch the real home unless asked', () => {
   }
 });
 
-test('postinstall: CI and repo node_modules skip, global and explicit installs run', () => {
+test('postinstall: CI skips, a repo node_modules copy migrates, global and explicit installs run', () => {
   const real = fs.mkdtempSync(path.join(os.tmpdir(), 'pkg-'));
   const inRepo = path.join(real, 'app', 'node_modules', 'exonous');
   fs.mkdirSync(inRepo, { recursive: true });
   assert.strictEqual(postinstallDecision({ CI: '1' }, inRepo).action, 'skip');
   assert.strictEqual(postinstallDecision({ CONTINUOUS_INTEGRATION: 'true' }, inRepo).action, 'skip');
-  assert.strictEqual(postinstallDecision({}, inRepo).action, 'skip');
+  assert.strictEqual(postinstallDecision({}, inRepo).action, 'migrate');
   assert.strictEqual(postinstallDecision({ npm_config_global: 'true' }, inRepo).action, 'install');
   const bunGlobal = path.join(real, '.bun', 'install', 'global', 'node_modules', 'exonous');
   fs.mkdirSync(bunGlobal, { recursive: true });

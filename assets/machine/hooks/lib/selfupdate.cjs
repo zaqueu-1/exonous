@@ -333,4 +333,5 @@ function run({ background = false, major = false } = {}) {
 
 module.exports = {
   DAY_MS, LOCK_STALE_MS, SOURCE, optedOut, due, lastCheck, markChecked, cleanNote, takeNote, tagWarning, check, run, spec,
+  pmCommand, pmRun, globalRoot, globalAllowed, verifyPackage,
 };

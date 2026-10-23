@@ -63,7 +63,7 @@ function guardTarget({ action, dryRun = false, realHome = false, log = () => {} 
   throw new Error(`refusing to ${action} the real home ${paths.home()} from a dev checkout (${PACKAGE_ROOT}); set EXONOUS_HOME to a test home, or pass --real-home if you mean it`);
 }
 
-/** @returns {{ action: 'install'|'skip', reason: string }} */
+/** @returns {{ action: 'install'|'skip'|'migrate', reason: string }} */
 function postinstallDecision(env, root = PACKAGE_ROOT) {
   if (env.CI || env.CONTINUOUS_INTEGRATION) return { action: 'skip', reason: 'CI' };
   if (devCheckout(root)) return { action: 'skip', reason: 'dev checkout — run `exonous install` with EXONOUS_HOME set to test' };
@@ -75,7 +75,7 @@ function postinstallDecision(env, root = PACKAGE_ROOT) {
   }
   const posix = real.split(path.sep).join('/');
   if (env.npm_config_global === 'true' || /\/\.bun\/install\/global\/|\/pnpm\/global\//.test(posix)) return { action: 'install', reason: 'global install' };
-  if (posix.includes('/node_modules/')) return { action: 'skip', reason: 'installed inside a project — exonous now installs machine-wide: npm i -g github:zaqueu-1/exonous then exonous install' };
+  if (posix.includes('/node_modules/')) return { action: 'migrate', reason: 'repo-mode install: moving it to the machine install' };
   return { action: 'install', reason: 'standalone' };
 }
 

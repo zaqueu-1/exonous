@@ -13,6 +13,7 @@ Usage: exonous <command> [flags]
   update        move to the latest release of this major   --check: report only  --major: cross a major
   doctor        check every piece and say how to fix what is missing
   uninstall     remove exonous from this machine            --yes  --dry-run
+  migrate       move a repo-mode (v2.0.0 or older) install of this repo to the machine install   --repo <dir>
   doctor/gate   exonous gate --selftest <tool>: pipe a fake git commit to the registered hook, expect a deny
 
   token <commit|push>    after review: allow one commit of the staged tree, or one push of HEAD (15 min)
@@ -36,10 +37,27 @@ const list = (name) => (value(name) ? value(name).split(',').map((s) => s.trim()
 const arg = (i) => process.argv[3 + i];
 const hooksLib = (name) => require(path.join(__dirname, '..', 'assets', 'machine', 'hooks', 'lib', name));
 
+// A copy inside a repo's node_modules is a repo-mode install (v2.0.0 updater or an older postinstall): migrate it.
+function runRepoMigration(root, trigger = 'cli') {
+  const result = require('../src/legacy/repo-migrate').migrateRepo({ root, trigger });
+  if (result.status === 'nothing') console.log(`[exonous] no repo-mode install found in ${root}`);
+  return result.status === 'blocked' ? 1 : 0;
+}
+
+function migrationRoot() {
+  const { repoOf } = require('../src/legacy/repo-migrate');
+  const repo = repoOf(path.join(__dirname, '..'));
+  const init = process.env.INIT_CWD && path.resolve(process.env.INIT_CWD);
+  // v2 wrote repo files into INIT_CWD; it may be a workspace below the repo that owns node_modules.
+  return init && repo && (init === repo || init.startsWith(`${repo}${path.sep}`)) ? init : repo;
+}
+
 function runInstall() {
-  if (process.argv[2] === 'setup' && process.env.npm_lifecycle_event === 'postinstall') {
+  if (process.argv[2] === 'setup') {
+    const lifecycle = process.env.npm_lifecycle_event === 'postinstall';
     const decision = require('../src/lib/runtime').postinstallDecision(process.env);
-    if (decision.action === 'skip') {
+    if (decision.action === 'migrate') return runRepoMigration(migrationRoot(), 'repo');
+    if (lifecycle && decision.action === 'skip') {
       console.log(`[exonous] postinstall skipped: ${decision.reason}`);
       return 0;
     }
@@ -142,6 +160,7 @@ const commands = {
   doctor: () => require('../src/doctor').doctor(),
   uninstall: () => require('../src/uninstall').uninstall({ yes: flag('yes'), dryRun: flag('dry-run'), realHome: flag('real-home') }),
   gate: runGate,
+  migrate: () => runRepoMigration(path.resolve(value('repo') || process.cwd())),
   token: runToken,
   workflow: () => {
     require('../src/workflow').workflow(arg(0));
