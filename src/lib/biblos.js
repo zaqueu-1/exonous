@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Ensure tron-docs (live library/API documentation MCP) is registered as `tron-docs`
+ * Ensure biblos (live library/API documentation MCP) is registered as `biblos`
  * for Claude Code (~/.claude.json) and Cursor (~/.cursor/mcp.json). An existing engine entry
  * is renamed in place so its headers (API key) survive; header values are never logged.
  */
@@ -11,12 +11,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const SERVER_KEY = 'tron-docs';
+const SERVER_KEY = 'biblos';
 const ENGINE_URL = 'https://mcp.context7.com/mcp';
 const ENGINE_KEY_HINT = 'context7';
 
 function log(msg) {
-  process.stdout.write(`[claude-config] ${msg}\n`);
+  process.stdout.write(`[exonous] ${msg}\n`);
 }
 
 function targets() {
@@ -31,7 +31,7 @@ function isEngineEntry(name, entry) {
   return name.toLowerCase().includes(ENGINE_KEY_HINT) || String(entry?.url || '').includes('context7.com');
 }
 
-function ensureTronDocs({ dryRun = false } = {}) {
+function ensureBiblos({ dryRun = false } = {}) {
   let changed = 0;
   for (const { file, entry, onlyIfDir } of targets()) {
     if (onlyIfDir && !fs.existsSync(onlyIfDir)) continue;
@@ -55,19 +55,19 @@ function ensureTronDocs({ dryRun = false } = {}) {
       : keyed || servers[legacy[0]] || entry;
     changed++;
     if (dryRun) {
-      log(`DRY: would register tron-docs → ${file}`);
+      log(`DRY: would register biblos → ${file}`);
       continue;
     }
-    const tmp = `${file}.tron-${process.pid}.tmp`;
+    const tmp = `${file}.exonous-${process.pid}.tmp`;
     fs.writeFileSync(tmp, `${JSON.stringify({ ...config, mcpServers: next }, null, 2)}\n`, 'utf8');
     fs.renameSync(tmp, file);
-    log(`registered tron-docs → ${file}`);
+    log(`registered biblos → ${file}`);
   }
   return { ok: true, changed };
 }
 
-module.exports = { ensureTronDocs };
+module.exports = { ensureBiblos };
 
 if (require.main === module) {
-  ensureTronDocs({ dryRun: process.argv.includes('--dry-run') });
+  ensureBiblos({ dryRun: process.argv.includes('--dry-run') });
 }

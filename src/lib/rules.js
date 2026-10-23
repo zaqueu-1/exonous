@@ -3,14 +3,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ALWAYS_FOLDERS, SCOPED_FOLDERS, detectProjectScope } = require('./detect-project-scope');
+const { ALWAYS_FOLDERS, SCOPED_FOLDERS, detectProjectScope } = require('./scope');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
-const RULES_ROOT = path.join(PACKAGE_ROOT, 'managed', 'tron-kit', 'rules');
+const RULES_ROOT = path.join(PACKAGE_ROOT, 'assets', 'techne', 'rules');
 const MANAGED_FOLDERS = [...new Set([...ALWAYS_FOLDERS, ...SCOPED_FOLDERS])];
 
 function log(msg) {
-  process.stdout.write(`[claude-config] ${msg}\n`);
+  process.stdout.write(`[exonous] ${msg}\n`);
 }
 
 function removeDir(dirPath) {
@@ -32,7 +32,7 @@ function listAvailableFolders(rulesRoot) {
 }
 
 function writeScopeManifest(projectRoot, scope) {
-  const manifestPath = path.join(projectRoot, '.claude', '.tron-scope.json');
+  const manifestPath = path.join(projectRoot, '.claude', '.exonous-scope.json');
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   const payload = {
     updatedAt: new Date().toISOString(),
@@ -43,44 +43,25 @@ function writeScopeManifest(projectRoot, scope) {
   fs.writeFileSync(manifestPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
-function removeLegacyRules(projectRoot, { dryRun, emit }) {
-  const legacy = [
-    path.join(projectRoot, '.claude', 'rules', 'ecc'),
-    path.join(projectRoot, '.claude', '.ecc-scope.json'),
-  ];
-  for (const target of legacy) {
-    if (!fs.existsSync(target)) continue;
-    const rel = path.relative(projectRoot, target);
-    if (dryRun) {
-      emit(`DRY: would remove legacy ${rel}`);
-      continue;
-    }
-    fs.rmSync(target, { recursive: true, force: true });
-    emit(`removed legacy ${rel}`);
-  }
-}
-
 /**
- * Sync tron-kit rules into the consumer project based on detected scope.
- * Sources rules from the bundled managed/tron-kit/rules — no network.
+ * Sync techne rules into the consumer project based on detected scope.
+ * Sources rules from the bundled assets/techne/rules — no network.
  * @param {string} projectRoot
  * @param {{ dryRun?: boolean, silent?: boolean }} [options]
  */
-function installTronRules(projectRoot, options = {}) {
+function installRules(projectRoot, options = {}) {
   const dryRun = Boolean(options.dryRun);
   const silent = Boolean(options.silent);
   const emit = silent ? () => {} : log;
 
   const scope = detectProjectScope(projectRoot);
-  const targetRoot = path.join(projectRoot, '.claude', 'rules', 'tron');
+  const targetRoot = path.join(projectRoot, '.claude', 'rules', 'exonous');
   const desired = new Set(scope.folders);
 
   if (!fs.existsSync(RULES_ROOT)) {
-    emit(`WARN: tron-kit rules missing at ${RULES_ROOT} — package is incomplete`);
+    emit(`WARN: techne rules missing at ${RULES_ROOT} — package is incomplete`);
     return { ok: false, scope };
   }
-
-  removeLegacyRules(projectRoot, { dryRun, emit });
 
   const available = listAvailableFolders(RULES_ROOT);
   const toInstall = scope.folders.filter((folder) => available.has(folder));
@@ -110,16 +91,16 @@ function installTronRules(projectRoot, options = {}) {
 
   const summary = toInstall.join(', ') || '(common only)';
   if (dryRun) {
-    emit(`DRY: would install tron-kit rules [${summary}] → .claude/rules/tron/`);
+    emit(`DRY: would install techne rules [${summary}] → .claude/rules/exonous/`);
   } else {
-    emit(`tron-kit rules synced [${summary}] → .claude/rules/tron/`);
+    emit(`techne rules synced [${summary}] → .claude/rules/exonous/`);
   }
 
   if (missingFromKit.length > 0) {
-    emit(`WARN: tron-kit is missing rule folders: ${missingFromKit.join(', ')}`);
+    emit(`WARN: techne is missing rule folders: ${missingFromKit.join(', ')}`);
   }
 
   return { ok: true, scope: { ...scope, folders: toInstall }, dryRun };
 }
 
-module.exports = { installTronRules };
+module.exports = { installRules };

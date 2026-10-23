@@ -4,12 +4,12 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Folders always installed from tron-kit. */
+/** Folders always installed from techne. */
 const ALWAYS_FOLDERS = ['common'];
 
 /**
- * tron-kit language/domain folders installed only when project scope matches.
- * Keys must match directory names under managed/tron-kit/rules/.
+ * techne language/domain folders installed only when project scope matches.
+ * Keys must match directory names under assets/techne/rules/.
  */
 const SCOPED_FOLDERS = [
   'csharp',
@@ -232,7 +232,7 @@ function detectScopedFolders(projectRoot, pkg, deps) {
 }
 
 /**
- * Returns tron-kit rule folder names to install for a consumer project.
+ * Returns techne rule folder names to install for a consumer project.
  * @param {string} projectRoot
  * @returns {{ folders: string[], scoped: string[], signals: Record<string, unknown> }}
  */

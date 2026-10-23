@@ -8,23 +8,18 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
-const KIT_SRC = path.join(PACKAGE_ROOT, 'managed', 'tron-kit');
+const KIT_SRC = path.join(PACKAGE_ROOT, 'assets', 'techne');
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
-const KIT_DEST = path.join(CLAUDE_DIR, 'tron-kit');
+const KIT_DEST = path.join(CLAUDE_DIR, 'techne');
 const SETTINGS_PATH = path.join(CLAUDE_DIR, 'settings.json');
-const MARKETPLACE = 'tron';
-const PLUGIN_ID = `tron-kit@${MARKETPLACE}`;
+const MARKETPLACE = 'exonous';
+const PLUGIN_ID = `techne@${MARKETPLACE}`;
 // `claude plugin update` skips same-version reinstalls, so content changes are detected by hash.
-const HASH_FILE = '.tron-kit-hash';
+const HASH_FILE = '.techne-hash';
 
-// Legacy upstream plugin this package replaces; removed only after tron-kit is in place.
-const LEGACY_PLUGIN_IDS = ['ecc@ecc', 'everything-claude-code@everything-claude-code'];
-const LEGACY_MARKETPLACES = ['ecc', 'everything-claude-code'];
-const LEGACY_RULES_DIR = path.join(CLAUDE_DIR, 'rules', 'ecc');
-const TRON_RULES_DIR = path.join(CLAUDE_DIR, 'rules', 'tron');
 
 function defaultLog(msg) {
-  process.stdout.write(`[claude-config] ${msg}\n`);
+  process.stdout.write(`[exonous] ${msg}\n`);
 }
 
 function packageVersion() {
@@ -120,18 +115,18 @@ function readInstalledHash(installPath) {
 
 function copyKit(version, { dryRun, log }) {
   if (!fs.existsSync(path.join(KIT_SRC, '.claude-plugin', 'plugin.json'))) {
-    throw new Error(`tron-kit missing at ${KIT_SRC} — package is incomplete`);
+    throw new Error(`techne missing at ${KIT_SRC} — package is incomplete`);
   }
   const contentHash = hashKit(KIT_SRC);
   if (dryRun) {
-    log(`DRY: would replace ~/.claude/tron-kit/ with managed/tron-kit (version ${version}, hash ${contentHash})`);
+    log(`DRY: would replace ~/.claude/techne/ with assets/techne (version ${version}, hash ${contentHash})`);
     return contentHash;
   }
   fs.rmSync(KIT_DEST, { recursive: true, force: true });
   fs.cpSync(KIT_SRC, KIT_DEST, { recursive: true, verbatimSymlinks: true });
   stampVersion(KIT_DEST, version);
   fs.writeFileSync(path.join(KIT_DEST, HASH_FILE), `${contentHash}\n`, 'utf8');
-  log(`tron-kit copied → ~/.claude/tron-kit/ (version ${version}, hash ${contentHash})`);
+  log(`techne copied → ~/.claude/techne/ (version ${version}, hash ${contentHash})`);
   return contentHash;
 }
 
@@ -151,7 +146,7 @@ function installViaCli(contentHash, { dryRun, log }) {
   if (!installed) {
     steps.push(['plugin', 'install', PLUGIN_ID, '--scope', 'user']);
   } else if (installedHash !== contentHash) {
-    log(`tron-kit content changed (${installedHash || 'no hash'} → ${contentHash}) — reinstalling`);
+    log(`techne content changed (${installedHash || 'no hash'} → ${contentHash}) — reinstalling`);
     steps.push(['plugin', 'uninstall', PLUGIN_ID, '--scope', 'user']);
     steps.push(['plugin', 'install', PLUGIN_ID, '--scope', 'user']);
   } else {
@@ -184,16 +179,16 @@ function registerViaSettings({ dryRun, log }) {
     }
     return changes;
   }, { dryRun, log });
-  log(`WARN: tron-kit registered via settings.json only — run \`claude plugin install ${PLUGIN_ID}\` or /plugin in Claude Code to finish`);
+  log(`WARN: techne registered via settings.json only — run \`claude plugin install ${PLUGIN_ID}\` or /plugin in Claude Code to finish`);
 }
 
 /**
- * Installs the tron-kit plugin at user scope from ~/.claude/tron-kit.
+ * Installs the techne plugin at user scope from ~/.claude/techne.
  * Throws when the kit cannot be copied; CLI failures fall back to settings.json registration.
  * @param {{ dryRun?: boolean, log?: (msg: string) => void }} [options]
  * @returns {{ via: 'cli' | 'settings' }}
  */
-function installTronKitPlugin(options = {}) {
+function installTechne(options = {}) {
   const dryRun = Boolean(options.dryRun);
   const log = options.log || defaultLog;
   const version = packageVersion();
@@ -208,27 +203,22 @@ function installTronKitPlugin(options = {}) {
 
   try {
     installViaCli(contentHash, { dryRun, log });
-    log(`tron-kit plugin ${dryRun ? 'would be ' : ''}installed (${PLUGIN_ID}, user scope)`);
+    log(`techne plugin ${dryRun ? 'would be ' : ''}installed (${PLUGIN_ID}, user scope)`);
     return { via: 'cli' };
   } catch (err) {
-    log(`WARN: tron-kit CLI install failed: ${err.message}`);
+    log(`WARN: techne CLI install failed: ${err.message}`);
     registerViaSettings({ dryRun, log });
     return { via: 'settings' };
   }
 }
 
-function uninstallLegacyViaCli({ dryRun, log }) {
-  const installed = listJson(['plugin', 'list']).filter((p) => LEGACY_PLUGIN_IDS.includes(p.id));
-  const marketplaces = listJson(['plugin', 'marketplace', 'list']).filter((m) => LEGACY_MARKETPLACES.includes(m.name));
-
+function uninstallViaCli(ids, marketplaces, { dryRun, log }) {
+  const installed = listJson(['plugin', 'list']).filter((p) => ids.includes(p.id));
+  const known = listJson(['plugin', 'marketplace', 'list']).filter((m) => marketplaces.includes(m.name));
   const steps = [
     ...installed.map((p) => ['plugin', 'uninstall', p.id, '--scope', p.scope || 'user']),
-    ...marketplaces.map((m) => ['plugin', 'marketplace', 'remove', m.name]),
+    ...known.map((m) => ['plugin', 'marketplace', 'remove', m.name]),
   ];
-  if (steps.length === 0) {
-    log('legacy plugin: nothing installed via CLI');
-    return;
-  }
   for (const args of steps) {
     if (dryRun) {
       log(`DRY: would run claude ${args.join(' ')}`);
@@ -239,16 +229,16 @@ function uninstallLegacyViaCli({ dryRun, log }) {
   }
 }
 
-function cleanLegacySettings({ dryRun, log }) {
+function cleanPluginSettings(ids, marketplaces, { dryRun, log }) {
   editSettings((settings) => {
     const changes = [];
-    for (const id of LEGACY_PLUGIN_IDS) {
+    for (const id of ids) {
       if (settings.enabledPlugins && id in settings.enabledPlugins) {
         delete settings.enabledPlugins[id];
         changes.push(`removed enabledPlugins["${id}"]`);
       }
     }
-    for (const name of LEGACY_MARKETPLACES) {
+    for (const name of marketplaces) {
       if (settings.extraKnownMarketplaces && name in settings.extraKnownMarketplaces) {
         delete settings.extraKnownMarketplaces[name];
         changes.push(`removed extraKnownMarketplaces.${name}`);
@@ -258,55 +248,23 @@ function cleanLegacySettings({ dryRun, log }) {
   }, { dryRun, log });
 }
 
-function migrateLegacyRules({ dryRun, log }) {
-  if (!fs.existsSync(LEGACY_RULES_DIR)) return;
-  const folders = fs.readdirSync(LEGACY_RULES_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
-
-  for (const folder of folders) {
-    const src = path.join(KIT_SRC, 'rules', folder);
-    if (!fs.existsSync(src)) {
-      log(`WARN: ~/.claude/rules/ecc/${folder} has no tron-kit equivalent — not migrated`);
-      continue;
-    }
-    const dest = path.join(TRON_RULES_DIR, folder);
-    if (dryRun) {
-      log(`DRY: would copy tron-kit rules/${folder} → ~/.claude/rules/tron/${folder}`);
-      continue;
-    }
-    fs.rmSync(dest, { recursive: true, force: true });
-    fs.mkdirSync(TRON_RULES_DIR, { recursive: true });
-    fs.cpSync(src, dest, { recursive: true });
-    log(`rules migrated → ~/.claude/rules/tron/${folder}`);
-  }
-
-  if (dryRun) {
-    log('DRY: would remove ~/.claude/rules/ecc/');
-    return;
-  }
-  fs.rmSync(LEGACY_RULES_DIR, { recursive: true, force: true });
-  log('removed ~/.claude/rules/ecc/');
-}
-
 /**
- * Removes the legacy upstream plugin, its marketplace, settings entries and user-level rules.
- * Call only after installTronKitPlugin() succeeded. Idempotent.
+ * Uninstalls plugins and their marketplaces (CLI when available) and drops their settings.json entries. Idempotent.
+ * @param {string[]} ids plugin ids, e.g. `name@marketplace`
+ * @param {string[]} marketplaces marketplace names
  * @param {{ dryRun?: boolean, log?: (msg: string) => void }} [options]
  */
-function removeLegacyEcc(options = {}) {
+function removePlugins(ids, marketplaces, options = {}) {
   const dryRun = Boolean(options.dryRun);
   const log = options.log || defaultLog;
-
   if (hasClaudeCli()) {
     try {
-      uninstallLegacyViaCli({ dryRun, log });
+      uninstallViaCli(ids, marketplaces, { dryRun, log });
     } catch (err) {
-      log(`WARN: legacy plugin CLI removal failed: ${err.message} — cleaning settings.json directly`);
+      log(`WARN: plugin CLI removal failed: ${err.message} — cleaning settings.json directly`);
     }
   }
-  cleanLegacySettings({ dryRun, log });
-  migrateLegacyRules({ dryRun, log });
+  cleanPluginSettings(ids, marketplaces, { dryRun, log });
 }
 
 function disableViaSettings(id, { dryRun, log }) {
@@ -356,7 +314,9 @@ function disablePlugin(id, options = {}) {
 }
 
 module.exports = {
-  installTronKitPlugin,
-  removeLegacyEcc,
+  installTechne,
+  removePlugins,
   disablePlugin,
+  PLUGIN_ID,
+  MARKETPLACE,
 };

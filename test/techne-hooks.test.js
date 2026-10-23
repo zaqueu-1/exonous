@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const RUN = path.resolve(__dirname, '..', '..', 'managed', 'tron-kit', 'scripts', 'hooks', 'run.js');
+const RUN = path.resolve(__dirname, '..', 'assets', 'techne', 'scripts', 'hooks', 'run.js');
 const NV = '--no-' + 'verify';
 
 function hook(id, payload, env = {}) {
@@ -16,7 +16,7 @@ function hook(id, payload, env = {}) {
   const res = spawnSync(process.execPath, [RUN, id], {
     input,
     encoding: 'utf8',
-    env: { ...process.env, TRON_HOOK_PROFILE: '', TRON_DISABLED_HOOKS: '', TRON_ALLOW_CONFIG_EDITS: '', ...env },
+    env: { ...process.env, EXONOUS_HOOK_PROFILE: '', EXONOUS_DISABLED_HOOKS: '', EXONOUS_ALLOW_CONFIG_EDITS: '', ...env },
   });
   return { code: res.status, stdout: res.stdout, stderr: res.stderr };
 }
@@ -47,7 +47,7 @@ test('no-verify guard blocks hook-skipping git commands', () => {
   for (const command of blocked) {
     const res = bash(command);
     assert.strictEqual(res.code, 2, `expected block: ${command}`);
-    assert.match(res.stderr, /tron-kit/);
+    assert.match(res.stderr, /techne/);
   }
 });
 
@@ -74,7 +74,7 @@ test('no-verify guard allows ordinary commands', () => {
 });
 
 test('config guard blocks edits to existing lint/format configs', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tron-kit-cfg-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'techne-cfg-'));
   for (const name of ['eslint.config.mjs', '.prettierrc', 'ESLint.Config.TS', 'eslint.config.base.mjs', '.eslintignore', 'biome.json', '.golangci.yml']) {
     fs.writeFileSync(path.join(dir, name), '{}');
     const res = hook('pre:config-guard', { tool_name: 'Edit', tool_input: { file_path: path.join(dir, name) } });
@@ -83,7 +83,7 @@ test('config guard blocks edits to existing lint/format configs', () => {
   fs.writeFileSync(path.join(dir, 'vite.config.ts'), '');
   assert.strictEqual(hook('pre:config-guard', { tool_input: { file_path: path.join(dir, 'vite.config.ts') } }).code, 0);
   assert.strictEqual(hook('pre:config-guard', { tool_input: { file_path: path.join(dir, 'new', '.prettierrc') } }).code, 0, 'creating a config is allowed');
-  const optOut = hook('pre:config-guard', { tool_input: { file_path: path.join(dir, 'biome.json') } }, { TRON_ALLOW_CONFIG_EDITS: '1' });
+  const optOut = hook('pre:config-guard', { tool_input: { file_path: path.join(dir, 'biome.json') } }, { EXONOUS_ALLOW_CONFIG_EDITS: '1' });
   assert.strictEqual(optOut.code, 0);
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -94,11 +94,11 @@ test('pre hooks stay neutral under Cursor payloads', () => {
   assert.strictEqual(res.stdout, '{}');
 });
 
-test('profiles and TRON_DISABLED_HOOKS gate hooks', () => {
+test('profiles and EXONOUS_DISABLED_HOOKS gate hooks', () => {
   const command = `git commit ${NV}`;
-  assert.strictEqual(bash(command, { TRON_HOOK_PROFILE: 'minimal' }).code, 0);
-  assert.strictEqual(bash(command, { TRON_DISABLED_HOOKS: 'pre:config-guard, pre:bash:no-verify' }).code, 0);
-  assert.strictEqual(bash(command, { TRON_HOOK_PROFILE: 'strict' }).code, 2);
+  assert.strictEqual(bash(command, { EXONOUS_HOOK_PROFILE: 'minimal' }).code, 0);
+  assert.strictEqual(bash(command, { EXONOUS_DISABLED_HOOKS: 'pre:config-guard, pre:bash:no-verify' }).code, 0);
+  assert.strictEqual(bash(command, { EXONOUS_HOOK_PROFILE: 'strict' }).code, 2);
 });
 
 test('oversized payloads fail closed for guards and open for the rest', () => {
@@ -108,7 +108,7 @@ test('oversized payloads fail closed for guards and open for the rest', () => {
 });
 
 test('edit tracker feeds stop checks, which flag console.log without failing', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tron-kit-stop-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'techne-stop-'));
   const file = path.join(dir, 'src', 'a.ts');
   fs.mkdirSync(path.dirname(file));
   fs.writeFileSync(file, 'export const a = 1;\nconsole.log(a);\n');

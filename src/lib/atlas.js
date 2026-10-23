@@ -2,9 +2,9 @@
 'use strict';
 
 /**
- * Ensure tron-graph (structural code graph MCP) is installed and registered as `tron-graph`
- * for Claude Code and Cursor. The engine binary is fetched by its platform installer; tron owns
- * the registration name so agents, rules and skills only ever reference `tron-graph`.
+ * Ensure atlas (structural code graph MCP) is installed and registered as `atlas`
+ * for Claude Code and Cursor. The engine binary is fetched by its platform installer; exonous owns
+ * the registration name so agents, rules and skills only ever reference `atlas`.
  *
  * macOS/Linux: install.sh | Windows: install.ps1 (Unblock-File) | Fallback: npm global
  */
@@ -14,7 +14,7 @@ const path = require('path');
 const os = require('os');
 const { execSync, spawnSync } = require('child_process');
 
-const SERVER_KEY = 'tron-graph';
+const SERVER_KEY = 'atlas';
 const ENGINE = 'codebase-memory-mcp';
 const ENGINE_INSTALL_SH = `https://raw.githubusercontent.com/DeusData/${ENGINE}/main/install.sh`;
 const ENGINE_INSTALL_PS1 = `https://raw.githubusercontent.com/DeusData/${ENGINE}/main/install.ps1`;
@@ -22,7 +22,7 @@ const MAX_ATTEMPTS = 3;
 const ATTEMPT_TIMEOUT_MS = 120000;
 
 function log(msg) {
-  process.stdout.write(`[claude-config] ${msg}\n`);
+  process.stdout.write(`[exonous] ${msg}\n`);
 }
 
 function mcpConfigPaths() {
@@ -44,7 +44,7 @@ function readJson(file) {
 
 function writeJsonAtomic(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tron-${process.pid}.tmp`;
+  const tmp = `${file}.exonous-${process.pid}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
   fs.renameSync(tmp, file);
 }
@@ -84,7 +84,7 @@ function isEngineEntry(name, entry) {
   return name === SERVER_KEY || name.includes('codebase-memory') || String(entry?.command || '').includes(ENGINE);
 }
 
-/** Register the engine under `tron-graph` and drop the engine's own key in every MCP config. */
+/** Register the engine under `atlas` and drop the engine's own key in every MCP config. */
 function normalizeRegistration(binary, { dryRun = false } = {}) {
   const changed = [];
   for (const { file, required, onlyIfDir } of mcpConfigPaths()) {
@@ -120,7 +120,7 @@ function runUnixInstaller() {
 }
 
 function runWindowsInstaller() {
-  const ps1 = path.join(os.tmpdir(), `tron-graph-install-${Date.now()}.ps1`);
+  const ps1 = path.join(os.tmpdir(), `atlas-install-${Date.now()}.ps1`);
   const script = [
     `$ErrorActionPreference = 'Stop'`,
     `Invoke-WebRequest -Uri '${ENGINE_INSTALL_PS1}' -OutFile '${ps1}'`,
@@ -170,71 +170,71 @@ function runPlatformInstaller() {
     runUnixInstaller();
   } catch (err) {
     if (!isWsl()) throw err;
-    log('tron-graph: Unix installer failed in WSL — trying npm global fallback…');
+    log('atlas: Unix installer failed in WSL — trying npm global fallback…');
     runNpmFallback();
   }
 }
 
-function isTronGraphReady() {
+function isAtlasReady() {
   return isRegisteredInMcpJson() && isBinaryOnPath();
 }
 
 /**
- * Ensure tron-graph is installed and registered.
+ * Ensure atlas is installed and registered.
  * @param {{ silent?: boolean, force?: boolean, dryRun?: boolean }} [options]
  * @returns {{ ok: boolean, alreadyReady?: boolean, attempts?: number }}
  */
-function ensureTronGraph(options = {}) {
+function ensureAtlas(options = {}) {
   const emit = options.silent ? () => {} : log;
 
   if (!options.force) {
     const binary = findBinary();
     if (binary) {
       const changed = normalizeRegistration(binary, { dryRun: options.dryRun });
-      for (const file of changed) emit(`${options.dryRun ? 'DRY: would register' : 'registered'} tron-graph → ${file}`);
-      if (isTronGraphReady() || (options.dryRun && changed.length)) return { ok: true, alreadyReady: !changed.length };
+      for (const file of changed) emit(`${options.dryRun ? 'DRY: would register' : 'registered'} atlas → ${file}`);
+      if (isAtlasReady() || (options.dryRun && changed.length)) return { ok: true, alreadyReady: !changed.length };
     }
   }
   if (options.dryRun) {
-    emit('DRY: would install tron-graph engine and register it');
+    emit('DRY: would install atlas engine and register it');
     return { ok: true };
   }
 
   let lastError = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      emit(`tron-graph: install attempt ${attempt}/${MAX_ATTEMPTS}…`);
+      emit(`atlas: install attempt ${attempt}/${MAX_ATTEMPTS}…`);
       try {
         runPlatformInstaller();
       } catch (err) {
         if (attempt < MAX_ATTEMPTS && process.platform !== 'win32' && !isWsl()) throw err;
         lastError = err;
-        emit('tron-graph: platform installer failed — trying npm global fallback…');
+        emit('atlas: platform installer failed — trying npm global fallback…');
         runNpmFallback();
       }
 
       const binary = findBinary();
       if (binary) normalizeRegistration(binary);
-      if (isTronGraphReady()) {
-        emit('tron-graph installed and registered');
+      if (isAtlasReady()) {
+        emit('atlas installed and registered');
         return { ok: true, attempts: attempt };
       }
-      lastError = new Error('installer finished but tron-graph is still not registered');
+      lastError = new Error('installer finished but atlas is still not registered');
     } catch (err) {
       lastError = err;
     }
   }
 
-  emit(`ERROR: tron-graph install FAILED after ${MAX_ATTEMPTS} attempts`);
-  emit(`  macOS/Linux: curl -fsSL ${ENGINE_INSTALL_SH} | bash && npm run ensure:tron-graph`);
-  emit(`  Windows:     irm ${ENGINE_INSTALL_PS1} | iex; npm run ensure:tron-graph`);
+  emit(`ERROR: atlas install FAILED after ${MAX_ATTEMPTS} attempts`);
+  emit(`  macOS/Linux: curl -fsSL ${ENGINE_INSTALL_SH} | bash && npm run ensure:atlas`);
+  emit(`  Windows:     irm ${ENGINE_INSTALL_PS1} | iex; npm run ensure:atlas`);
   if (lastError?.message) emit(`  Last error: ${lastError.message}`);
   return { ok: false, attempts: MAX_ATTEMPTS };
 }
 
-module.exports = { ensureTronGraph };
+module.exports = { ensureAtlas };
 
 if (require.main === module) {
-  const result = ensureTronGraph({ force: process.argv.includes('--force'), dryRun: process.argv.includes('--dry-run') });
+  const result = ensureAtlas({ force: process.argv.includes('--force'), dryRun: process.argv.includes('--dry-run') });
   process.exit(result.ok ? 0 : 1);
 }

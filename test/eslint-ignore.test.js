@@ -5,7 +5,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ensureEslintIgnore, IGNORE_ENTRY } = require('./ensure-eslint-ignore');
+const { ensureEslintIgnore, IGNORE_ENTRY } = require('../src/lib/eslint-ignore');
 
 function consumer(files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eslint-ignore-'));

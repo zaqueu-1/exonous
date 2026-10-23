@@ -9,7 +9,7 @@ const { execFileSync } = require('child_process');
 const {
   validateBodyContent,
   validateGhPrCreateCommand,
-} = require(path.join(__dirname, '../../managed/claude/hooks/lib/pr-template-validate.cjs'));
+} = require(path.join(__dirname, '../assets/repo/claude/hooks/lib/pr-template-validate.cjs'));
 
 const VALID_BODY = `## Resumo
 Objetivo da PR.
@@ -62,6 +62,21 @@ run(['add', '.'], repo);
 commit('big');
 assert.strictEqual(ok('gh pr create --base main --body-file .claude/body.md'), false, '26+ files blocked');
 assert.strictEqual(ok('gh pr create --base missing-branch --body-file .claude/body.md'), true, 'unknown base never blocks');
+
+run(['checkout', '-q', 'main'], repo);
+run(['merge', '-q', '--ff-only', 'feat/x'], repo);
+run(['push', '-q', 'origin', 'main'], repo);
+run(['fetch', '-q', 'origin'], repo);
+run(['checkout', '-q', '-b', 'feat/move'], repo);
+fs.mkdirSync(path.join(repo, 'moved'));
+for (let i = 0; i < 26; i += 1) run(['mv', `f${i}.txt`, `moved/f${i}.txt`], repo);
+commit('move');
+assert.strictEqual(ok('gh pr create --base main --body-file .claude/body.md'), true, 'pure renames do not count');
+fs.writeFileSync(path.join(repo, 'moved', 'f0.txt'), 'edited');
+for (let i = 0; i < 25; i += 1) fs.writeFileSync(path.join(repo, `n${i}.txt`), `new ${i}`);
+run(['add', '.'], repo);
+commit('edit');
+assert.strictEqual(ok('gh pr create --base main --body-file .claude/body.md'), false, 'a rename with edits counts');
 
 fs.rmSync(tmp, { recursive: true, force: true });
 

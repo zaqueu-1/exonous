@@ -1,8 +1,6 @@
 'use strict';
 
-// Installs the 12 tron agents and enforces them as the only roster (Claude Code + Cursor).
-// Agents → ~/.claude/agents, ~/.cursor/agents · guard + roster → ~/.claude/tron/
-// Any other agent file is moved to ~/.claude/tron/agent-roles/ by the guard's sweep.
+// Installs the 12 exo-* agents and enforces them as the only roster (Claude Code + Cursor).
 
 const fs = require('fs');
 const os = require('os');
@@ -10,8 +8,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
-const SRC = path.join(PACKAGE_ROOT, 'managed', 'agents');
-const GUARD = 'agent-roster-guard.js';
+const SRC = path.join(PACKAGE_ROOT, 'assets', 'agents');
+const GUARD = 'taxis.js';
 
 // Cursor resolves models itself; Claude-only fields would pin a model Cursor may not offer.
 function toCursorAgent(content) {
@@ -29,7 +27,7 @@ function readJson(file, fallback) {
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tron-${process.pid}.tmp`;
+  const tmp = `${file}.exonous-${process.pid}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
   fs.renameSync(tmp, file);
 }
@@ -58,28 +56,27 @@ function registerCursorHooks(hooksPath, command) {
   writeJson(hooksPath, config);
 }
 
-function installTronAgents({ dryRun = false, log = () => {} } = {}) {
+function installAgents({ dryRun = false, log = () => {} } = {}) {
   const home = os.homedir();
-  const tronDir = path.join(home, '.claude', 'tron');
-  const guardPath = path.join(tronDir, GUARD);
-  const agentFiles = fs.readdirSync(path.join(SRC, 'tron')).filter((f) => f.endsWith('.md'));
+  const stateDir = path.join(home, '.claude', 'exonous');
+  const guardPath = path.join(stateDir, GUARD);
+  const agentFiles = fs.readdirSync(SRC).filter((f) => /^exo-.+\.md$/.test(f));
   const cursorDir = path.join(home, '.cursor');
   const hasCursor = fs.existsSync(cursorDir);
 
   if (dryRun) {
-    log(`DRY: would install ${agentFiles.length} tron agents and roster guard → ~/.claude/tron/`);
+    log(`DRY: would install ${agentFiles.length} agents and taxis → ~/.claude/exonous/`);
     return;
   }
 
-  fs.mkdirSync(tronDir, { recursive: true });
+  fs.mkdirSync(stateDir, { recursive: true });
   fs.copyFileSync(path.join(SRC, GUARD), guardPath);
-  fs.copyFileSync(path.join(SRC, 'roster.json'), path.join(tronDir, 'roster.json'));
+  fs.copyFileSync(path.join(SRC, 'roster.json'), path.join(stateDir, 'roster.json'));
 
   execFileSync(process.execPath, [guardPath, 'claude'], { input: '{"hook_event_name":"SessionStart"}', stdio: ['pipe', 'ignore', 'pipe'] });
-  fs.rmSync(path.join(tronDir, 'agent-roles', 'impeccable'), { recursive: true, force: true });
 
   for (const file of agentFiles) {
-    const content = fs.readFileSync(path.join(SRC, 'tron', file), 'utf8');
+    const content = fs.readFileSync(path.join(SRC, file), 'utf8');
     const claudeDir = path.join(home, '.claude', 'agents');
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(path.join(claudeDir, file), content, 'utf8');
@@ -89,21 +86,19 @@ function installTronAgents({ dryRun = false, log = () => {} } = {}) {
     }
   }
 
-  const rule = fs.readFileSync(path.join(PACKAGE_ROOT, 'managed', 'claude', 'rules', 'agent-roster.md'), 'utf8');
-  fs.mkdirSync(path.join(home, '.claude', 'rules'), { recursive: true });
-  fs.writeFileSync(path.join(home, '.claude', 'rules', 'agent-roster.md'), rule, 'utf8');
+  const rule = fs.readFileSync(path.join(PACKAGE_ROOT, 'assets', 'rules', 'nomos.md'), 'utf8');
 
-  registerClaudeHooks(path.join(home, '.claude', 'settings.json'), `node "$HOME/.claude/tron/${GUARD}" claude`);
+  registerClaudeHooks(path.join(home, '.claude', 'settings.json'), `node "$HOME/.claude/exonous/${GUARD}" claude`);
   if (hasCursor) {
     fs.mkdirSync(path.join(cursorDir, 'rules'), { recursive: true });
     fs.writeFileSync(
-      path.join(cursorDir, 'rules', 'agent-roster.mdc'),
-      `---\ndescription: Tron agent roster and orchestration (enforced)\nalwaysApply: true\n---\n\n${rule}`,
+      path.join(cursorDir, 'rules', 'nomos.mdc'),
+      `---\ndescription: Exonous nomos — core rules and agent roster (enforced)\nalwaysApply: true\n---\n\n${rule}`,
       'utf8',
     );
     registerCursorHooks(path.join(cursorDir, 'hooks.json'), `"${process.execPath}" "${guardPath}" cursor`);
   }
-  log(`tron agents (${agentFiles.length}) installed and enforced → ~/.claude/agents${hasCursor ? ', ~/.cursor/agents' : ''}`);
+  log(`agents (${agentFiles.length}) installed and enforced → ~/.claude/agents${hasCursor ? ', ~/.cursor/agents' : ''}`);
 }
 
-module.exports = { installTronAgents };
+module.exports = { installAgents };
