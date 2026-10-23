@@ -48,7 +48,7 @@ Install and uninstall write into other tools' configs under the real home. Never
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`.
 
 - **test:** Ubuntu, macOS and Windows on Node 20 and 22, plus Ubuntu on Node 18. Steps run in bash and call `node --test test/*.test.js` directly: `npm test` goes through cmd.exe on Windows, which leaves the glob unexpanded. `core.autocrlf` is off so checkouts keep LF.
-- **wsl:** Ubuntu-24.04 under WSL on a Windows runner. It copies the repo to the Linux filesystem (`/mnt/*` has no POSIX modes) and exports the temp-home env itself, since Windows variables do not cross into WSL. It has `continue-on-error: true`; remove it after the first green run.
+- **wsl:** Ubuntu-24.04 under WSL on a Windows runner. It copies the repo to the Linux filesystem (`/mnt/*` has no POSIX modes) and exports the temp-home env itself, since Windows variables do not cross into WSL. It blocks like every other job.
 - Both jobs set `EXONOUS_HOME`, `HOME`, `EXONOUS_NO_UPDATE=1` and a null `GIT_CONFIG_GLOBAL`, as in the safety rules above.
 
 ## Adding a tool adapter
