@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+        include:
+          - os: ubuntu-latest
+            node: 18
+    defaults:
+      run:
+        # Git Bash on Windows: expands test/*.test.js (pwsh/cmd hand node the literal glob).
+        shell: bash
+    steps:
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Test
+        env:
+          EXONOUS_HOME: ${{ runner.temp }}/exonous-home
+          HOME: ${{ runner.temp }}/home
+          USERPROFILE: ${{ runner.temp }}/home
+          EXONOUS_NO_UPDATE: '1'
+          GIT_CONFIG_GLOBAL: ${{ runner.os == 'Windows' && 'NUL' || '/dev/null' }}
+        # Same as `npm test`, run directly: npm uses cmd.exe on Windows, which leaves the glob unexpanded.
+        run: |
+          mkdir -p "$EXONOUS_HOME" "$HOME"
+          node --version
+          node --test test/*.test.js
+
+  wsl:
+    name: test (wsl ubuntu-24.04)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # Flip to false (or drop) after the first green run.
+    continue-on-error: true
+    steps:
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: Vampire/setup-wsl@4c48163d9f981914dd8caa0fc335fe19cca5bff4 # v7.2.0
+        with:
+          distribution: Ubuntu-24.04
+          additional-packages: nodejs git
+
+      - name: Test
+        shell: wsl-bash {0}
+        # Copy to the Linux filesystem: /mnt/* (drvfs) has no POSIX modes and is slow. Windows env vars do not cross into WSL, so export them here.
+        run: |
+          set -euo pipefail
+          node --version
+          src="$(pwd)"
+          work="$(mktemp -d)"
+          cp -r "$src" "$work/repo"
+          cd "$work/repo"
+          find . -path ./.git -prune -o -type f -exec chmod 644 {} +
+          git -c safe.directory='*' ls-files -s | awk '$1 == "100755" { print $4 }' | xargs -r chmod 755
+          export EXONOUS_HOME="$work/exonous-home" HOME="$work/home" EXONOUS_NO_UPDATE=1 GIT_CONFIG_GLOBAL=/dev/null
+          mkdir -p "$EXONOUS_HOME" "$HOME"
+          node --test test/*.test.js
