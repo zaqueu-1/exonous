@@ -57,9 +57,9 @@ test('selection: detected tools by default, flags narrow or widen, unknown names
   assert.deepStrictEqual(select({}).selected.map((a) => a.id), ['cursor']);
   assert.deepStrictEqual(select({ tools: ['claude'] }).selected.map((a) => a.id), ['claude']);
   fs.rmSync(home('.cursor'), { recursive: true });
-  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['cursor', 'gemini', 'codex', 'opencode'], '--all ignores detection, not disabledTools');
+  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['cursor', 'gemini', 'codex', 'opencode', 'windsurf', 'copilot', 'cline', 'qwen', 'kiro'], '--all ignores detection, not disabledTools');
   fs.rmSync(home('.claude', 'exonous', 'config.json'));
-  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['claude', 'cursor', 'gemini', 'codex', 'opencode']);
+  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['claude', 'cursor', 'gemini', 'codex', 'opencode', 'windsurf', 'copilot', 'cline', 'qwen', 'kiro']);
   assert.throws(() => select({ tools: ['vim'] }), /unknown tool: vim/);
 });
 

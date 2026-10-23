@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('../lib/paths');
+const { onPath } = require('./shared');
 const { mergeOwned, stripOwned, mergeAllow } = require('../lib/settings');
 const { installTechne, PLUGIN_ID } = require('../lib/techne');
 const { installAgents } = require('../lib/agents');
@@ -15,7 +16,6 @@ const ALLOW_PREFIX = 'Bash(exonous ';
 const EXONOUS_ALLOW = ['workflow*', 'template*', 'draft-path*', 'validate-pr*'].map((c) => `${ALLOW_PREFIX}${c})`);
 
 const settingsFile = () => path.join(paths.claudeDir(), 'settings.json');
-const onPath = (bin) => (process.env.PATH || '').split(path.delimiter).some((dir) => dir && fs.existsSync(path.join(dir, bin)));
 
 function detect() {
   return fs.existsSync(paths.claudeDir()) || onPath('claude');

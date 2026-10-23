@@ -87,4 +87,10 @@ function mergeMcp(file, { tool, key, entries, dryRun = false, log = () => {}, js
 /** Removes only the MCP entries exonous wrote for this tool, unchanged since. */
 const removeMcp = (file, options) => mergeMcp(file, { ...options, entries: {} });
 
-module.exports = { onPath, readJson, claudeMcp, mergeMcp, removeMcp, MCP_KEYS };
+/** Doctor row every soft-tier tool shows: rules may load, nothing blocks a commit. */
+const softRow = (label, what = 'rules only') => ({
+  name: `${label}: gate`, ok: false, level: 'warn', status: `soft: not enforced — ${what}`,
+  fix: 'commit through a hard-gated tool, or run `exonous workflow commit` and review by hand',
+});
+
+module.exports = { onPath, readJson, claudeMcp, mergeMcp, removeMcp, softRow, MCP_KEYS };

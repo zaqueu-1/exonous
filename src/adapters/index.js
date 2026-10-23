@@ -11,8 +11,15 @@ const cursor = require('./cursor');
 const gemini = require('./gemini');
 const codex = require('./codex');
 const opencode = require('./opencode');
+const windsurf = require('./windsurf');
+const copilot = require('./copilot');
+const cline = require('./cline');
+const qwen = require('./qwen');
+const kiro = require('./kiro');
+const aider = require('./aider');
 
-const ADAPTERS = [claude, cursor, gemini, codex, opencode];
+// Roo is skipped: no verified docs for any of its surfaces.
+const ADAPTERS = [claude, cursor, gemini, codex, opencode, windsurf, copilot, cline, qwen, kiro, aider];
 
 function readConfig() {
   try {

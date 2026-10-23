@@ -7,7 +7,7 @@ const paths = require('./lib/paths');
 const { createHome } = require('./lib/home');
 const { ensureAtlas } = require('./lib/atlas');
 const { ensureBiblos } = require('./lib/biblos');
-const { select } = require('./adapters');
+const { select, ADAPTERS } = require('./adapters');
 const { ASSETS, DESIGN_SKILLS, packageVersion, installRuntime, writeInstallInfo, isolatedHome, guardTarget } = require('./lib/runtime');
 const legacy = require('./legacy/bridge');
 
@@ -38,7 +38,7 @@ function installDesignStack(home, { dryRun, log }) {
 /** A hard-gate tool whose gate could not be registered is named at the end of the run, never just buried in a WARN. */
 function gateProblems(adapter, { dryRun, warnings, problems }) {
   const out = problems.map((p) => ({ tool: adapter.id, ...p }));
-  if (dryRun || adapter.gate !== 'hard' || adapter.registeredCommand()) return out;
+  if (dryRun || adapter.gate !== 'hard' || out.some((p) => p.what === 'gate') || adapter.registeredCommand()) return out;
   const reason = (warnings[0] || 'the hook could not be registered').replace(/ — [^—]*not written; file left untouched$/, '');
   const fix = /not valid JSON/.test(reason) && ['gemini', 'opencode'].includes(adapter.id)
     ? 'fix the JSON by hand, or rerun `exonous install --rewrite-jsonc` (drops comments; backup kept)'
@@ -83,6 +83,8 @@ function install({
   writeInstallInfo({ tools: Object.fromEntries(selected.map((a) => [a.id, a])), dryRun });
   home.prune(packageVersion(), { tools: selected.map((a) => a.id) });
   for (const p of inactive) emit(`⚠ ${p.tool}: ${p.what} NOT active — ${p.reason}; fix: ${p.fix}`);
+  for (const adapter of selected.filter((a) => a.gate === 'soft')) emit(`⚠ ${adapter.id}: ${adapter.softNote || 'rules only'} — commits are NOT gated`);
+  for (const adapter of ADAPTERS.filter((a) => a.gate === 'none' && detected[a.id])) emit(`⚠ ${adapter.id}: unsupported — ${adapter.HINT}`);
   emit(`install ${dryRun ? 'dry run ' : ''}done (v${packageVersion()}) — ${selected.map((a) => a.id).join(', ') || 'no tools'}`);
   return { tools: selected.map((a) => a.id), inactive };
 }

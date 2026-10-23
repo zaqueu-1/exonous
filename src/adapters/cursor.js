@@ -4,12 +4,12 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('../lib/paths');
+const { onPath } = require('./shared');
 const { mergeOwned, stripOwned } = require('../lib/settings');
 const { ASSETS, OWNED_MARKER, COMMANDS, DESIGN_SKILLS, hookCommand, uiDesignBin } = require('../lib/runtime');
 
 const TOOL = 'cursor';
 const hooksFile = () => path.join(paths.cursorDir(), 'hooks.json');
-const onPath = (bin) => (process.env.PATH || '').split(path.delimiter).some((dir) => dir && fs.existsSync(path.join(dir, bin)));
 
 function detect() {
   return fs.existsSync(paths.cursorDir()) || onPath('cursor');

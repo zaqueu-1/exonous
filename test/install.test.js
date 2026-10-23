@@ -291,3 +291,29 @@ test('doctor: warn-level rows show ⚠ with their fix and never fail the run', (
   assert.match(withBad.text, /✗ c\n {6}fix: install/);
 });
 
+
+test('a fixture home with all ten tools: doctor shows every tool with the right level', () => {
+  const { spawnSync } = require('child_process');
+  const osHome = fs.mkdtempSync(path.join(os.tmpdir(), 'install-oshome-'));
+  for (const dir of ['.cursor', '.gemini', '.codex', '.config/opencode', '.codeium/windsurf/memories', '.copilot', 'Documents/Cline', '.qwen', '.kiro']) fs.mkdirSync(home(dir), { recursive: true });
+  fs.writeFileSync(home('.codeium', 'windsurf', 'hooks.json'), '{}\n');
+  fs.writeFileSync(home('.codeium', 'windsurf', 'memories', 'global_rules.md'), '');
+  fs.writeFileSync(home('.aider.conf.yml'), 'model: x\n');
+  const env = { ...process.env, HOME: osHome, USERPROFILE: osHome, EXONOUS_NO_UPDATE: '1' };
+  delete env.EXONOUS_TEST;
+  const bin = path.join(__dirname, '..', 'bin', 'exonous.js');
+  const res = spawnSync(process.execPath, [bin, 'install', '--quiet'], { env, encoding: 'utf8' });
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.match(res.stdout, /⚠ cline: rules only — commits are NOT gated/);
+  assert.match(res.stdout, /⚠ aider: unsupported — /);
+  const doctor = spawnSync(process.execPath, [bin, 'doctor'], { env, encoding: 'utf8' }).stdout;
+  assert.match(doctor, /^exonous v[\d.]+ — gated: claude, cursor, gemini, codex, opencode, windsurf, copilot; rules only: cline, qwen; detected: kiro; unsupported: aider\n/);
+  assert.match(doctor, /\nCommits gated in 7 tools; NOT gated in 4: cline, qwen, kiro, aider\.\n/);
+  for (const id of ['claude', 'cursor', 'gemini', 'codex', 'opencode', 'windsurf', 'copilot']) assert.match(doctor, new RegExp(`✓ ${id}: gate self-test \\(script self-test`), id);
+  for (const label of ['Cline: gate', 'Qwen Code: gate', 'Kiro: gate']) assert.match(doctor, new RegExp(`⚠ ${label} \\(soft: not enforced`), label);
+  for (const label of ['Windsurf: gate hook', 'Windsurf: nomos min rules', 'Copilot: gate hook \\(Preview\\)', 'Cline: nomos rules', 'Qwen Code: nomos rules']) assert.match(doctor, new RegExp(`✓ ${label}`), label);
+  assert.match(doctor, /⚠ Aider: unsupported/);
+  assert.match(doctor, /⚠ Codex CLI: gate approved in \/hooks/);
+  assert.ok(!/✗ (cline|qwen|kiro|aider): gate self-test/.test(doctor), 'soft and unsupported tools get no self-test');
+  assert.deepStrictEqual(fs.readdirSync(osHome), []);
+});

@@ -3,12 +3,21 @@
 
 // Pre-exec shell gate: pyle.cjs <auto|commit|pr|push> [--adapter <id>]. Node builtins + ./lib only.
 const { spawnSync } = require('child_process');
-const payload = require('./lib/payload.cjs');
-const token = require('./lib/token.cjs');
-const { repoRoot, gitEnv, gitOut } = require('./lib/paths.cjs');
-const { analyze, isolationProblem, redirectionProblem } = require('./lib/shell.cjs');
-const { parseOptions, has, COMMIT, PUSH, GH_PR_CREATE } = require('./lib/cli-options.cjs');
-const { validatePrCreate, prFields } = require('./lib/pr-template-validate.cjs');
+
+// A half-updated or broken runtime must still block git/gh: Windsurf, for one, only blocks on exit 2.
+let payload, token, repoRoot, gitEnv, gitOut, analyze, isolationProblem, redirectionProblem;
+let parseOptions, has, COMMIT, PUSH, GH_PR_CREATE, validatePrCreate, prFields;
+let loadError = null;
+try {
+  payload = require('./lib/payload.cjs');
+  token = require('./lib/token.cjs');
+  ({ repoRoot, gitEnv, gitOut } = require('./lib/paths.cjs'));
+  ({ analyze, isolationProblem, redirectionProblem } = require('./lib/shell.cjs'));
+  ({ parseOptions, has, COMMIT, PUSH, GH_PR_CREATE } = require('./lib/cli-options.cjs'));
+  ({ validatePrCreate, prFields } = require('./lib/pr-template-validate.cjs'));
+} catch (err) {
+  loadError = err;
+}
 
 const MODES = ['commit', 'pr', 'push'];
 const PROTECTED = /^(main|master)$/;
@@ -16,7 +25,9 @@ const GATED_WORD = /commit|push|\bpr\b[\s\S]*\b(create|new)\b/i;
 const GIT_WORD = /\bgit\b|\bgh\b/;
 const DISPLAY = { commit: 'git commit', push: 'git push', pr: 'gh pr create' };
 const STAGING = ['all', 'patch', 'interactive', 'include', 'only', 'pathspec-from-file'];
-const GITLEAKS_TIMEOUT_MS = 60000;
+// Tool hooks time out (Copilot defaults to 30 s): probe + scan stay well under that, and a timeout denies.
+const GITLEAKS_TIMEOUT_MS = 20000;
+const GITLEAKS_PROBE_MS = 5000;
 
 const TOKEN_REASONS = {
   commit: {
@@ -59,9 +70,9 @@ function scanStaged(cwd, warnings) {
   const root = repoRoot(cwd);
   const tampered = gitleaksConfigChanged(root) || allowCommentStaged(root);
   if (tampered) return tampered;
-  const run = (args) => spawnSync('gitleaks', args, { cwd: root, env: gitEnv(), encoding: 'utf8', timeout: GITLEAKS_TIMEOUT_MS });
+  const run = (args, timeout = GITLEAKS_TIMEOUT_MS) => spawnSync('gitleaks', args, { cwd: root, env: gitEnv(), encoding: 'utf8', timeout });
   // Older gitleaks lacks the flag; the staged-diff check above covers it then.
-  const help = run(['git', '--help']);
+  const help = run(['git', '--help'], GITLEAKS_PROBE_MS);
   const args = ['git', '--staged', '--redact', '--no-banner'];
   if (!help.error && `${help.stdout}${help.stderr}`.includes('--ignore-gitleaks-allow')) args.push('--ignore-gitleaks-allow');
   const res = help.error && help.error.code === 'ENOENT' ? help : run(args);
@@ -242,6 +253,29 @@ function main(argv) {
   });
 }
 
-if (require.main === module) main(process.argv.slice(2));
+/** No libs available: deny anything that mentions git or gh with exit 2 (the one block signal every tool honors). */
+function loadFailure(err) {
+  let raw = '';
+  const done = () => {
+    if (!GIT_WORD.test(raw)) return;
+    process.stderr.write(`exonous: blocked — the gate could not load (${err.message}); run \`exonous install\` or \`exonous doctor\`.\n`);
+    process.exitCode = 2;
+  };
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => { raw += chunk; });
+  process.stdin.on('end', done);
+  process.stdin.on('error', done);
+}
+
+if (require.main === module) {
+  if (loadError) loadFailure(loadError);
+  else {
+    try {
+      main(process.argv.slice(2));
+    } catch (err) {
+      loadFailure(err);
+    }
+  }
+}
 
 module.exports = { gate, gateAll, pushPlan };

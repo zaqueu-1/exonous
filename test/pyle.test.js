@@ -478,3 +478,26 @@ test('PR titles are checked in the body only, and --base comes from the parsed o
   assert.strictEqual(run('pr', claude('gh pr create --label "## Summary" --label "## Test plan" --fill', dir), env).code, 2);
   assert.strictEqual(run('pr', claude('gh pr create --title t --body "## Summary\n## Test plan"', dir), env).code, 0);
 });
+
+test('a hook runtime that cannot load fails closed for git/gh (exit 2) and open for anything else', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pyle-broken-'));
+  fs.mkdirSync(path.join(dir, 'lib'));
+  fs.copyFileSync(PYLE, path.join(dir, 'pyle.cjs'));
+  fs.writeFileSync(path.join(dir, 'lib', 'payload.cjs'), 'throw new Error("half-updated runtime");');
+  const gate = (command) => spawnSync(process.execPath, [path.join(dir, 'pyle.cjs'), 'auto', '--adapter', 'windsurf'], {
+    input: JSON.stringify({ agent_action_name: 'pre_run_command', tool_info: { command_line: command, cwd: dir } }), encoding: 'utf8',
+  });
+  const git = gate('git commit -m x');
+  assert.strictEqual(git.status, 2);
+  assert.match(git.stderr, /exonous: blocked — the gate could not load/);
+  assert.strictEqual(gate('gh pr create').status, 2);
+  const ls = gate('ls -la');
+  assert.strictEqual(ls.status, 0);
+});
+
+test('gitleaks is capped well under tool hook timeouts', () => {
+  const src = fs.readFileSync(PYLE, 'utf8');
+  assert.match(src, /const GITLEAKS_TIMEOUT_MS = 20000;/);
+  assert.match(src, /const GITLEAKS_PROBE_MS = 5000;/);
+});
+

@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('./lib/paths');
-const { select, selftest } = require('./adapters');
+const { select, selftest, ADAPTERS } = require('./adapters');
 const { DESIGN_SKILLS, packageVersion, readInstallInfo } = require('./lib/runtime');
 const { LEFTOVERS } = require('./legacy/bridge');
 const selfupdate = require('../assets/machine/hooks/lib/selfupdate.cjs');
@@ -60,16 +60,37 @@ function sharedChecks() {
 }
 
 function doctor() {
-  const tools = select({}).selected;
-  const gates = tools.map((a) => {
+  const { selected: tools, detected } = select({});
+  const hints = ADAPTERS.filter((a) => a.gate === 'none' && detected[a.id]);
+  const gates = tools.filter((a) => a.gate === 'hard').map((a) => {
     const result = selftest(a);
     return { name: `${a.id}: gate self-test`, ok: result.ok, status: result.detail, fix: 'exonous install' };
   });
-  const checks = [...sharedChecks(), ...updateChecks(), ...tools.flatMap((a) => a.doctor({})), ...gates];
-  console.log(`exonous v${packageVersion()} — ${tools.map((a) => a.id).join(', ') || 'no supported tool detected'}\n`);
+  const checks = [...sharedChecks(), ...updateChecks(), ...[...tools, ...hints].flatMap((a) => a.doctor({})), ...gates];
+  const groups = toolGroups(tools, hints);
+  console.log(`exonous v${packageVersion()} — ${groups.header || 'no supported tool detected'}\n`);
   const { text, failed } = report(checks);
   console.log(text);
+  if (groups.header) console.log(groups.summary);
   return failed ? 1 : 0;
+}
+
+/** Hard-gated tools apart from the ones exonous only feeds rules to, detects, or cannot support. */
+function toolGroups(tools, hints) {
+  const ids = (list) => list.map((a) => a.id);
+  const gated = ids(tools.filter((a) => a.gate === 'hard'));
+  const soft = tools.filter((a) => a.gate === 'soft');
+  const parts = [
+    ['gated', gated],
+    ['rules only', ids(soft.filter((a) => !a.softNote))],
+    ['detected', ids(soft.filter((a) => a.softNote))],
+    ['unsupported', ids(hints)],
+  ].filter(([, list]) => list.length);
+  const ungated = [...ids(soft), ...ids(hints)];
+  return {
+    header: parts.map(([label, list]) => `${label}: ${list.join(', ')}`).join('; '),
+    summary: `Commits gated in ${gated.length} tool${gated.length === 1 ? '' : 's'}${ungated.length ? `; NOT gated in ${ungated.length}: ${ungated.join(', ')}` : ''}.`,
+  };
 }
 
 /** Rows exonous cannot verify carry level 'warn': shown with ⚠ and their fix, never counted as failures. */

@@ -14,6 +14,7 @@ const SILENT = ['windsurf', 'opencode'];
 const FORMATS = {
   cursor: (note) => JSON.stringify({ additional_context: note }),
   gemini: (note) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: note } }),
+  copilot: (note) => JSON.stringify({ additionalContext: note }),
 };
 
 function startUpdate(selfupdate, adapter) {
