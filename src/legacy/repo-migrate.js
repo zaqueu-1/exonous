@@ -199,8 +199,9 @@ function gitHooksDir(root, summary, log) {
   const common = gitRead(root, ['rev-parse', '--git-common-dir']);
   const hooks = gitRead(root, ['rev-parse', '--git-path', 'hooks']);
   if (!gitDir || !common || !hooks) return null;
-  const commonReal = fs.realpathSync(path.resolve(root, common));
-  if (fs.realpathSync(gitDir) !== commonReal) {
+  // .native expands Windows 8.3 names: git prints the long path, the root may be the short one.
+  const commonReal = fs.realpathSync.native(path.resolve(root, common));
+  if (fs.realpathSync.native(gitDir) !== commonReal) {
     const main = path.dirname(commonReal);
     summary.notes.push(`git hooks are shared with ${main} — run \`exonous migrate\` there`);
     log(`git hooks are shared with ${main} — run \`exonous migrate\` there`);
@@ -209,7 +210,7 @@ function gitHooksDir(root, summary, log) {
   const dir = path.resolve(root, hooks);
   let real = dir;
   try {
-    real = fs.realpathSync(dir);
+    real = fs.realpathSync.native(dir);
   } catch {
     return null;
   }

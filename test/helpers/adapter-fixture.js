@@ -8,7 +8,9 @@ const { beforeEach, afterEach } = require('node:test');
 
 const KEYS = ['EXONOUS_HOME', 'HOME', 'PATH', 'EXONOUS_NO_UPDATE'];
 
-const GIT_DIR = (process.env.PATH || '').split(path.delimiter).find((d) => d && fs.existsSync(path.join(d, 'git.exe')));
+const dirWith = (exe) => (process.env.PATH || '').split(path.delimiter).find((d) => d && fs.existsSync(path.join(d, exe)));
+// git runs hooks and local transports through sh, which Git for Windows keeps apart from git.exe.
+const GIT_DIRS = [dirWith('git.exe'), dirWith('sh.exe')];
 let winNodeDir;
 
 // Windows cannot delete a hard link to a running node.exe, so one copy per process is shared and removed on exit.
@@ -25,7 +27,7 @@ function isolatedPath() {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'adapter-bin-'));
   if (process.platform === 'win32') {
     const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
-    return [bin, windowsNodeDir(), GIT_DIR, system32].filter(Boolean).join(path.delimiter);
+    return [bin, windowsNodeDir(), ...GIT_DIRS, system32].filter(Boolean).join(path.delimiter);
   }
   fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   return [bin, '/usr/bin', '/bin'].join(path.delimiter);

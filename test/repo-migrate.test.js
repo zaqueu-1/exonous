@@ -124,6 +124,7 @@ const quietLogs = () => {
   return { logs, log: (m) => logs.push(m) };
 };
 const migrate = (r, opts = {}) => migrateRepo({ root: r.root, manifest: MANIFEST, env: { ...process.env, npm_lifecycle_event: '' }, ...quietLogs(), ...opts });
+const pmShims = process.platform === 'win32' ? 'extensionless pm shims' : false;
 
 test('v2.0.0-style repo: unmodified files removed, modified kept and listed, settings stripped, design entries stripped, git hooks removed', () => {
   machine();
@@ -146,8 +147,10 @@ test('v2.0.0-style repo: unmodified files removed, modified kept and listed, set
   for (const name of Object.keys(HOOKS)) assert.ok(!fs.existsSync(path.join(r.hooksDir, name)), name);
   assert.ok(r.exists('src/app.js') && r.exists('package.json'));
   assert.ok(fx.exists('.claude', 'exonous', 'hooks', 'pyle.cjs'), 'machine install ran first');
-  assert.ok(calls().some((c) => /^npm uninstall --ignore-scripts --no-audit --no-fund exonous @/.test(c)), calls().join('\n'));
-  assert.strictEqual(res.devDependency, 'removed');
+  if (!pmShims) {
+    assert.ok(calls().some((c) => /^npm uninstall --ignore-scripts --no-audit --no-fund exonous @/.test(c)), calls().join('\n'));
+    assert.strictEqual(res.devDependency, 'removed');
+  }
   assert.ok(q.logs.some((m) => /^\d+ tracked file\(s\) deleted — commit the cleanup$/.test(m)), q.logs.join('\n'));
   assert.ok(res.trackedRemoved >= 7);
 });
@@ -161,7 +164,7 @@ test('a shipped, unedited settings.json is deleted outright', () => {
   assert.ok(!r.exists('.claude/settings.json'));
 });
 
-test('tron-style repo with @tron/claude-config: tron files removed, the legacy devDependency dropped via pnpm', () => {
+test('tron-style repo with @tron/claude-config: tron files removed, the legacy devDependency dropped via pnpm', { skip: pmShims }, () => {
   machine();
   const calls = shims();
   const r = repo({ dep: '@tron/claude-config', lockfile: 'pnpm-lock.yaml' });
@@ -171,7 +174,7 @@ test('tron-style repo with @tron/claude-config: tron files removed, the legacy d
   assert.strictEqual(res.devDependency, 'removed');
 });
 
-test('bun lockfile → bun remove', () => {
+test('bun lockfile → bun remove', { skip: pmShims }, () => {
   machine();
   const calls = shims();
   const r = repo({ lockfile: 'bun.lock' });
@@ -293,7 +296,7 @@ test('inside a pm lifecycle (postinstall) the devDependency is never removed', (
   assert.ok(!calls().some((c) => /uninstall/.test(c)));
 });
 
-test('the v2.0.0 updater\'s own spec bump does not count as a dirty package.json or package-lock.json', () => {
+test('the v2.0.0 updater\'s own spec bump does not count as a dirty package.json or package-lock.json', { skip: pmShims }, () => {
   machine();
   const calls = shims();
   const r = repo();
@@ -389,7 +392,7 @@ function releaseSource() {
   return { url: `file://${path.join(dir, 'r.git')}`, sha };
 }
 
-test('the global add pins the tag commit and verifies the package; it is skipped in a redirected home without the test opt-in, and failures only warn', () => {
+test('the global add pins the tag commit and verifies the package; it is skipped in a redirected home without the test opt-in, and failures only warn', { skip: pmShims }, () => {
   machine();
   const calls = shims();
   const r = repo();
