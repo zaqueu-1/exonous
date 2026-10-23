@@ -59,6 +59,6 @@ test('a symlinked package root is resolved before matching', () => {
   const real = path.join(base, '.bun', 'install', 'global', 'node_modules', 'exonous');
   fs.mkdirSync(real, { recursive: true });
   const link = path.join(base, 'exonous-link');
-  fs.symlinkSync(real, link, 'dir');
+  fs.symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir');
   assert.strictEqual(paths.detectPm({}, link), 'bun');
 });

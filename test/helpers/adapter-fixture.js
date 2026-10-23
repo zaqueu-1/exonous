@@ -11,6 +11,14 @@ const KEYS = ['EXONOUS_HOME', 'HOME', 'PATH', 'EXONOUS_NO_UPDATE'];
 // node's own bin dir may hold globally installed tool CLIs (gemini, opencode): only a node link plus system dirs.
 function isolatedPath() {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'adapter-bin-'));
+  if (process.platform === 'win32') {
+    try {
+      fs.linkSync(process.execPath, path.join(bin, 'node.exe'));
+    } catch {
+      fs.copyFileSync(process.execPath, path.join(bin, 'node.exe'));
+    }
+    return [bin, path.join(process.env.SystemRoot || 'C:\\Windows', 'System32')].join(path.delimiter);
+  }
   fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   return [bin, '/usr/bin', '/bin'].join(path.delimiter);
 }
