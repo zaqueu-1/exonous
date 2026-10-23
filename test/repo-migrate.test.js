@@ -161,7 +161,9 @@ test('a shipped, unedited settings.json is deleted outright', () => {
   assert.ok(!r.exists('.claude/settings.json'));
 });
 
-test('tron-style repo with @tron/claude-config: tron files removed, the legacy devDependency dropped via pnpm', () => {
+const pmShims = process.platform === 'win32' ? 'extensionless pm shims' : false;
+
+test('tron-style repo with @tron/claude-config: tron files removed, the legacy devDependency dropped via pnpm', { skip: pmShims }, () => {
   machine();
   const calls = shims();
   const r = repo({ dep: '@tron/claude-config', lockfile: 'pnpm-lock.yaml' });
@@ -171,7 +173,7 @@ test('tron-style repo with @tron/claude-config: tron files removed, the legacy d
   assert.strictEqual(res.devDependency, 'removed');
 });
 
-test('bun lockfile → bun remove', () => {
+test('bun lockfile → bun remove', { skip: pmShims }, () => {
   machine();
   const calls = shims();
   const r = repo({ lockfile: 'bun.lock' });
@@ -389,7 +391,7 @@ function releaseSource() {
   return { url: `file://${path.join(dir, 'r.git')}`, sha };
 }
 
-test('the global add pins the tag commit and verifies the package; it is skipped in a redirected home without the test opt-in, and failures only warn', () => {
+test('the global add pins the tag commit and verifies the package; it is skipped in a redirected home without the test opt-in, and failures only warn', { skip: pmShims }, () => {
   machine();
   const calls = shims();
   const r = repo();

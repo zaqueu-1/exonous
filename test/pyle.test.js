@@ -14,7 +14,15 @@ const token = require('../assets/machine/hooks/lib/token.cjs');
 const { repoKey } = require('../assets/machine/hooks/lib/paths.cjs');
 
 const PYLE = path.join(__dirname, '..', 'assets', 'machine', 'hooks', 'pyle.cjs');
-const GIT_DIR = path.dirname(execFileSync('which', ['git'], { encoding: 'utf8' }).trim());
+const WIN = process.platform === 'win32';
+// Git Bash's `which` prints a POSIX path, so Windows takes git's dir straight from PATH.
+const GIT_DIR = WIN
+  ? process.env.PATH.split(path.delimiter).find((d) => d && fs.existsSync(path.join(d, 'git.exe')))
+  : path.dirname(execFileSync('which', ['git'], { encoding: 'utf8' }).trim());
+const SYSTEM_DIRS = WIN ? [path.join(process.env.SystemRoot || 'C:\\Windows', 'System32')] : ['/usr/bin', '/bin'];
+const PATH_TAIL = ['', GIT_DIR, ...SYSTEM_DIRS].join(path.delimiter);
+const WIN_ENV = WIN ? { SystemRoot: process.env.SystemRoot } : {};
+const shSkip = WIN ? 'sh gitleaks shim' : false;
 const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, env: { ...process.env, ...GIT_ENV }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -37,7 +45,7 @@ function setup({ branch = 'feat/x' } = {}) {
   git(dir, 'commit', '-q', '--no-gpg-sign', '-m', 'init');
   fs.writeFileSync(path.join(dir, 'b.txt'), 'b');
   git(dir, 'add', 'b.txt');
-  const env = { ...GIT_ENV, EXONOUS_HOME: home, HOME: home, PATH: `${shim(CLEAN)}:${GIT_DIR}:/usr/bin:/bin` };
+  const env = { ...GIT_ENV, ...WIN_ENV, EXONOUS_HOME: home, HOME: home, PATH: `${shim(CLEAN)}${PATH_TAIL}` };
   const withHome = (fn) => {
     const prev = process.env.EXONOUS_HOME;
     process.env.EXONOUS_HOME = home;
@@ -71,8 +79,8 @@ test('the analyzer finds gated git and gh calls anywhere on the line', () => {
   const kinds = (cmd, cwd = '/r') => analyze(cmd, cwd).calls.map((c) => `${c.kind}@${c.cwd}`);
   assert.deepStrictEqual(kinds('git commit -m x'), ['commit@/r']);
   assert.deepStrictEqual(kinds('git -C sub -c user.name=x commit -m y'), [`commit@${path.resolve('/r', 'sub')}`]);
-  assert.deepStrictEqual(kinds('cd /w && git add . && git commit -m "a; b" | cat'), ['commit@/w']);
-  assert.deepStrictEqual(kinds('cd "/w x" && git push origin HEAD'), ['push@/w x']);
+  assert.deepStrictEqual(kinds('cd /w && git add . && git commit -m "a; b" | cat'), [`commit@${path.resolve('/w')}`]);
+  assert.deepStrictEqual(kinds('cd "/w x" && git push origin HEAD'), [`push@${path.resolve('/w x')}`]);
   assert.deepStrictEqual(kinds('gh -R o/r pr create --fill && gh pr new'), ['pr@/r', 'pr@/r']);
   assert.deepStrictEqual(kinds('echo "$(git commit -m x)"'), ['commit@/r']);
   assert.deepStrictEqual(kinds("bash -lc 'git push -f'"), ['push@/r']);
@@ -161,15 +169,15 @@ test('every adapter fixture is gated with its own deny format', () => {
   assert.strictEqual(run('commit', { command: 'ls', cwd: dir }, env, { adapter: 'cursor' }).stdout, '{"permission":"allow"}');
 });
 
-test('gitleaks findings deny, absence warns and allows', () => {
+test('gitleaks findings deny, absence warns and allows', { skip: shSkip }, () => {
   const fx = setup();
   fx.mint('commit');
-  const leaky = { ...fx.env, PATH: `${shim('echo "Finding: aws key"; exit 3')}:${GIT_DIR}:/usr/bin:/bin` };
+  const leaky = { ...fx.env, PATH: `${shim('echo "Finding: aws key"; exit 3')}${PATH_TAIL}` };
   const res = run('commit', claude('git commit -m x', fx.dir), leaky);
   assert.strictEqual(res.code, 2);
   assert.match(res.stderr, /gitleaks/);
   assert.ok(fs.existsSync(fx.tokenFile('commit')), 'a denied commit keeps its token');
-  const absent = { ...fx.env, PATH: `${shim(null)}:${GIT_DIR}` };
+  const absent = { ...fx.env, PATH: `${shim(null)}${path.delimiter}${GIT_DIR}` };
   const ok = run('commit', claude('git commit -m x', fx.dir), absent);
   assert.strictEqual(ok.code, 0);
   assert.match(JSON.parse(ok.stdout).hookSpecificOutput.additionalContext, /gitleaks not installed/);
@@ -465,7 +473,7 @@ test('gitleaks config detection ignores case (case-insensitive file systems reso
   assert.match(src, /\/\^\\\.gitleaks\/i\.test/);
 });
 
-test('a changed gitleaks config or a failing gitleaks blocks the commit', () => {
+test('a changed gitleaks config or a failing gitleaks blocks the commit', { skip: shSkip }, () => {
   const fx = setup();
   fs.writeFileSync(path.join(fx.dir, '.gitleaks.toml'), '[extend]\nuseDefault = true\n');
   git(fx.dir, 'add', '.gitleaks.toml');
@@ -491,18 +499,18 @@ test('a changed gitleaks config or a failing gitleaks blocks the commit', () => 
   fs.writeFileSync(path.join(fx.dir, 'e.txt'), 'e');
   git(fx.dir, 'add', 'e.txt');
   for (const script of ['echo boom >&2; exit 1', 'kill -9 $$']) {
-    const env = { ...fx.env, PATH: `${shim(script)}:${GIT_DIR}:/usr/bin:/bin` };
+    const env = { ...fx.env, PATH: `${shim(script)}${PATH_TAIL}` };
     const res = attempt(env);
     assert.strictEqual(res.code, 2, script);
     assert.match(res.stderr, /gitleaks/, script);
   }
 });
 
-test('git calls made by the gate never run a repo fsmonitor command', () => {
+test('git calls made by the gate never run a repo fsmonitor command', { skip: shSkip }, () => {
   const fx = setup();
   const marker = path.join(fx.home, 'fsmonitor-ran');
   git(fx.dir, 'config', 'core.fsmonitor', `touch ${marker}`);
-  const env = { ...fx.env, PATH: `${shim('git status >/dev/null 2>&1; exit 0')}:${GIT_DIR}:/usr/bin:/bin` };
+  const env = { ...fx.env, PATH: `${shim('git status >/dev/null 2>&1; exit 0')}${PATH_TAIL}` };
   fx.mint('commit');
   run('commit', claude('git commit -m x', fx.dir), env);
   run('push', claude('git push origin main', fx.dir), env);
@@ -550,14 +558,14 @@ test('a staged gitleaks:allow comment blocks the commit', () => {
   assert.match(res.stderr, /gitleaks:allow/);
 });
 
-test('gitleaks gets --ignore-gitleaks-allow only when it supports the flag', () => {
+test('gitleaks gets --ignore-gitleaks-allow only when it supports the flag', { skip: shSkip }, () => {
   const fx = setup();
   const log = path.join(fx.home, 'args.log');
   const script = (help) => `if [ "$2" = "--help" ]; then echo "${help}"; exit 0; fi; echo "$@" >> ${log}; exit 0`;
   for (const [help, expected] of [['      --ignore-gitleaks-allow   ignore gitleaks:allow comments', true], ['      --redact', false]]) {
     fs.rmSync(log, { force: true });
     fx.mint('commit');
-    const env = { ...fx.env, PATH: `${shim(script(help))}:${GIT_DIR}:/usr/bin:/bin` };
+    const env = { ...fx.env, PATH: `${shim(script(help))}${PATH_TAIL}` };
     assert.strictEqual(run('commit', claude('git commit -m x', fx.dir), env).code, 0);
     assert.strictEqual(fs.readFileSync(log, 'utf8').includes('--ignore-gitleaks-allow'), expected, help);
   }

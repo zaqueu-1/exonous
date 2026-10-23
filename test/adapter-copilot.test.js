@@ -44,7 +44,8 @@ test('the registered gate denies with JSON permissionDecision for a camelCase to
   const res = selftest(copilot);
   assert.ok(res.ok, res.detail);
   const command = copilot.registeredCommand();
-  const out = spawnSync('sh', ['-c', command], { input: JSON.stringify({ toolName: 'bash', toolArgs: JSON.stringify({ command: 'git commit -m x' }), cwd: path.sep }), encoding: 'utf8' });
+  const [shell, args] = process.platform === 'win32' ? ['cmd.exe', ['/d', '/s', '/c', `"${command}"`]] : ['sh', ['-c', command]];
+  const out = spawnSync(shell, args, { windowsVerbatimArguments: true, input: JSON.stringify({ toolName: 'bash', toolArgs: JSON.stringify({ command: 'git commit -m x' }), cwd: path.sep }), encoding: 'utf8' });
   assert.strictEqual(out.status, 0);
   assert.strictEqual(JSON.parse(out.stdout).permissionDecision, 'deny');
 });

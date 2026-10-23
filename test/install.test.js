@@ -232,11 +232,13 @@ test('ledger paths that escape the home are never removed', async () => {
 });
 
 test('a dev checkout refuses to touch the real home unless asked', () => {
-  const saved2 = { home: process.env.EXONOUS_HOME, HOME: process.env.HOME };
+  const saved2 = { home: process.env.EXONOUS_HOME, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
   const fakeReal = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-real-home-'));
   try {
     delete process.env.EXONOUS_HOME;
+    // os.homedir() reads USERPROFILE on Windows, HOME elsewhere.
     process.env.HOME = fakeReal;
+    process.env.USERPROFILE = fakeReal;
     assert.throws(() => guardTarget({ action: 'uninstall' }), /refusing to uninstall.*--real-home/s);
     assert.doesNotThrow(() => guardTarget({ action: 'uninstall', dryRun: true }));
     assert.doesNotThrow(() => guardTarget({ action: 'install', realHome: true }));
@@ -245,6 +247,8 @@ test('a dev checkout refuses to touch the real home unless asked', () => {
   } finally {
     process.env.EXONOUS_HOME = saved2.home;
     process.env.HOME = saved2.HOME;
+    if (saved2.USERPROFILE === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = saved2.USERPROFILE;
   }
 });
 
