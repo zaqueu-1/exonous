@@ -60,8 +60,6 @@ jobs:
     name: test (wsl ubuntu-24.04)
     runs-on: windows-latest
     timeout-minutes: 30
-    # Flip to false (or drop) after the first green run.
-    continue-on-error: true
     steps:
       - name: Keep LF line endings
         run: git config --global core.autocrlf false
