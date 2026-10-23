@@ -72,8 +72,12 @@ pack() {
   [ -f "$TARBALL" ]
 }
 
+# No install lifecycle scripts: npm must install the tarball without running any exonous code.
 global_install() {
-  npm i -g --prefix "$PREFIX" --offline --no-audit --no-fund "$TARBALL"
+  npm i -g --prefix "$PREFIX" --offline --no-audit --no-fund --foreground-scripts "$TARBALL" >"$WORK/npm-install.out" 2>&1
+  cat "$WORK/npm-install.out"
+  ! grep -q '\[exonous\]' "$WORK/npm-install.out"
+  [ ! -e "$EXONOUS_HOME/.claude/exonous" ]
   command -v exonous | grep -q "^$PREFIX/"
 }
 
@@ -135,7 +139,7 @@ echo "exonous e2e smoke — work dir $WORK"
 oshome_untouched() { [ -z "$(ls -A "$HOME" | grep -v '^\.npm$' || true)" ]; }
 seed
 step "npm pack" pack
-step "global install into a temp prefix (postinstall runs)" global_install
+step "global install into a temp prefix runs none of our code" global_install
 step "exonous install" exonous install --quiet
 step "exonous doctor renders the coverage matrix" doctor
 sed -n '/Tool .*| Tier/,/^$/p' "$WORK/doctor.out"

@@ -52,10 +52,25 @@ function denyText(mode, why) {
 
 // ── Commit ───────────────────────────────────────────────────────────────────
 
+// Case-insensitive: macOS and Windows resolve .GITLEAKS.toml as the config gitleaks reads.
+const GITLEAKS_SPEC = ':(glob,icase)**/.gitleaks*';
+const isGitleaksFile = (rel) => !rel.endsWith('/') && /^\.gitleaks/i.test(rel.split('/').pop());
+
+// Tracked changes from status; untracked and ignored files one by one from ls-files, which (unlike status --ignored)
+// never collapses an ignored directory into a single entry.
 function gitleaksConfigChanged(root) {
-  const out = gitOut(root, ['status', '--porcelain', '--untracked-files=all', '--ignored=matching', '--', ':(glob)**/.gitleaks*']);
-  if (out === null) return 'git could not report the gitleaks config state';
-  const files = out.split('\n').filter(Boolean).map((l) => l.slice(3));
+  const tracked = gitOut(root, ['status', '--porcelain=v1', '-z', '--untracked-files=no', '--', GITLEAKS_SPEC]);
+  const others = gitOut(root, ['ls-files', '-z', '--others', '--', GITLEAKS_SPEC]);
+  if (tracked === null || others === null) return 'git could not report the gitleaks config state';
+  // -z entries are "XY path"; a rename or copy is followed by its original path as a bare entry.
+  const changed = [];
+  const tokens = tracked.split('\0');
+  for (let i = 0; i < tokens.length; i++) {
+    if (!tokens[i]) continue;
+    changed.push(tokens[i].slice(3));
+    if (/^[RC]/.test(tokens[i])) changed.push(tokens[++i] || '');
+  }
+  const files = [...new Set([...changed, ...others.split('\0')])].filter((rel) => rel && isGitleaksFile(rel));
   return files.length ? `the gitleaks config differs from HEAD (${files.join(', ')}); a human must commit it` : null;
 }
 
