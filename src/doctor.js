@@ -2,14 +2,13 @@
 
 // exonous doctor: one screen, every piece, and the fix for whatever is missing.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const paths = require('./lib/paths');
 const { update } = require('./update');
 const { packageVersion, gitHooksDir, REPO_FILES, GIT_HOOKS, DESIGN_SKILLS, HOME_SKILLS, PACKAGE_ROOT } = require('./setup');
 const { PLUGIN_ID } = require('./lib/techne');
 const { LEFTOVERS } = require('./legacy/bridge');
 
-const HOME = os.homedir();
 const FIX_SETUP = 'npx exonous setup';
 
 function readJson(file) {
@@ -21,7 +20,7 @@ function readJson(file) {
 }
 
 function hasMcp(key) {
-  return [path.join(HOME, '.claude', '.mcp.json'), path.join(HOME, '.claude.json')]
+  return [path.join(paths.home(), '.claude', '.mcp.json'), path.join(paths.home(), '.claude.json')]
     .some((file) => Boolean(readJson(file)?.mcpServers?.[key]));
 }
 
@@ -60,18 +59,18 @@ function releaseCheck(root) {
 }
 
 function machineChecks() {
-  const settings = readJson(path.join(HOME, '.claude', 'settings.json')) || {};
-  const agents = fs.existsSync(path.join(HOME, '.claude', 'agents'))
-    ? fs.readdirSync(path.join(HOME, '.claude', 'agents')).filter((f) => /^exo-.+\.md$/.test(f)).length
+  const settings = readJson(path.join(paths.home(), '.claude', 'settings.json')) || {};
+  const agents = fs.existsSync(path.join(paths.home(), '.claude', 'agents'))
+    ? fs.readdirSync(path.join(paths.home(), '.claude', 'agents')).filter((f) => /^exo-.+\.md$/.test(f)).length
     : 0;
-  const memoryConfig = readJson(path.join(HOME, '.claude', 'skills', 'project-memory', 'config.json'));
-  const leftovers = LEFTOVERS.filter((rel) => fs.existsSync(path.join(HOME, rel)));
+  const memoryConfig = readJson(path.join(paths.home(), '.claude', 'skills', 'project-memory', 'config.json'));
+  const leftovers = LEFTOVERS.filter((rel) => fs.existsSync(path.join(paths.home(), rel)));
   return [
-    { name: 'nomos (core rule)', ok: fs.existsSync(path.join(HOME, '.claude', 'rules', 'nomos.md')), fix: FIX_SETUP },
+    { name: 'nomos (core rule)', ok: fs.existsSync(path.join(paths.home(), '.claude', 'rules', 'nomos.md')), fix: FIX_SETUP },
     { name: 'agents exo-* + taxis', ok: agents === 12 && JSON.stringify(settings.hooks || {}).includes('taxis.js'), detail: `${agents}/12 agents`, fix: FIX_SETUP },
-    { name: 'skills', ok: Object.keys(HOME_SKILLS).every((s) => fs.existsSync(path.join(HOME, '.claude', 'skills', s, 'SKILL.md'))), fix: FIX_SETUP },
-    { name: 'design stack', ok: DESIGN_SKILLS.every((s) => fs.existsSync(path.join(HOME, '.agents', 'skills', s, 'SKILL.md'))), fix: FIX_SETUP },
-    { name: 'techne plugin', ok: fs.existsSync(path.join(HOME, '.claude', 'techne')) && settings.enabledPlugins?.[PLUGIN_ID] !== false, fix: FIX_SETUP },
+    { name: 'skills', ok: Object.keys(HOME_SKILLS).every((s) => fs.existsSync(path.join(paths.home(), '.claude', 'skills', s, 'SKILL.md'))), fix: FIX_SETUP },
+    { name: 'design stack', ok: DESIGN_SKILLS.every((s) => fs.existsSync(path.join(paths.home(), '.agents', 'skills', s, 'SKILL.md'))), fix: FIX_SETUP },
+    { name: 'techne plugin', ok: fs.existsSync(path.join(paths.home(), '.claude', 'techne')) && settings.enabledPlugins?.[PLUGIN_ID] !== false, fix: FIX_SETUP },
     { name: 'atlas MCP (code graph)', ok: hasMcp('atlas'), fix: 'node node_modules/exonous/src/lib/atlas.js --force' },
     { name: 'biblos MCP (library docs)', ok: hasMcp('biblos'), fix: 'node node_modules/exonous/src/lib/biblos.js' },
     {
@@ -85,7 +84,7 @@ function machineChecks() {
 
 function doctor({ root = process.cwd() } = {}) {
   const checks = [...repoChecks(root), releaseCheck(root), ...machineChecks()];
-  console.log(`exonous v${packageVersion()} — ${root.replace(HOME, '~')}\n`);
+  console.log(`exonous v${packageVersion()} — ${root.replace(paths.home(), '~')}\n`);
   for (const check of checks) {
     const detail = check.detail ? ` (${check.detail})` : '';
     console.log(`  ${check.ok ? '✓' : '✗'} ${check.name}${detail}${check.ok ? '' : `\n      fix: ${check.fix}`}`);

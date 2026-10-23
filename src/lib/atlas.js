@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFileSync, execSync, spawnSync } = require('child_process');
+const paths = require('./paths');
 
 const SERVER_KEY = 'atlas';
 const ENGINE = 'codebase-memory-mcp';
@@ -32,7 +33,7 @@ function log(msg) {
 }
 
 function mcpConfigPaths() {
-  const home = os.homedir();
+  const home = paths.home();
   return [
     { file: path.join(home, '.claude', '.mcp.json'), required: true },
     { file: path.join(home, '.claude.json'), required: false },
@@ -61,7 +62,7 @@ function isRegisteredInMcpJson() {
 }
 
 function binaryCandidates() {
-  const home = os.homedir();
+  const home = paths.home();
   const exe = process.platform === 'win32' ? `${ENGINE}.exe` : ENGINE;
   return [
     path.join(home, '.local', 'bin', exe),

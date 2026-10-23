@@ -2,8 +2,8 @@
 
 // exonous setup: installs the repo gates and the machine-level toolkit. Idempotent — safe to re-run at any time.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const paths = require('./lib/paths');
 const { execFileSync } = require('child_process');
 const { createHome } = require('./lib/home');
 const { installRules } = require('./lib/rules');
@@ -16,7 +16,6 @@ const legacy = require('./legacy/bridge');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const ASSETS = path.join(PACKAGE_ROOT, 'assets');
-const HOME = os.homedir();
 
 const REPO_FILES = [
   ['repo/AGENTS.md', 'AGENTS.md'],
@@ -43,7 +42,7 @@ const HOME_SKILLS = {
 };
 const DESIGN_SKILLS = ['ui-design', 'ui-motion', 'native-ui', 'ui-mockup'];
 // POSIX separators: the path is spliced into JSON hook templates and sh commands.
-const UI_DESIGN_BIN = path.join(HOME, '.agents', 'skills', 'ui-design', 'scripts', 'ui-design').replaceAll('\\', '/');
+const uiDesignBin = () => path.join(paths.home(), '.agents', 'skills', 'ui-design', 'scripts', 'ui-design').replaceAll('\\', '/');
 
 function defaultLog(msg) {
   process.stdout.write(`[exonous] ${msg}\n`);
@@ -123,7 +122,7 @@ function ensureGitignore({ root, dryRun, log }) {
 }
 
 function mergeDesignHook({ root, dryRun, log }, template, dest) {
-  const fresh = JSON.parse(fs.readFileSync(path.join(ASSETS, 'editors', 'hooks', template), 'utf8').replaceAll('__UI_DESIGN_BIN__', UI_DESIGN_BIN));
+  const fresh = JSON.parse(fs.readFileSync(path.join(ASSETS, 'editors', 'hooks', template), 'utf8').replaceAll('__UI_DESIGN_BIN__', uiDesignBin()));
   const before = fs.existsSync(dest) ? fs.readFileSync(dest, 'utf8') : '';
   let config;
   try {
@@ -135,7 +134,7 @@ function mergeDesignHook({ root, dryRun, log }, template, dest) {
   config.hooks = config.hooks || {};
   for (const [event, entries] of Object.entries(fresh.hooks)) {
     const list = Array.isArray(config.hooks[event]) ? config.hooks[event] : [];
-    config.hooks[event] = list.some((entry) => JSON.stringify(entry).includes(UI_DESIGN_BIN)) ? list : [...list, ...entries];
+    config.hooks[event] = list.some((entry) => JSON.stringify(entry).includes(uiDesignBin())) ? list : [...list, ...entries];
   }
   const after = `${JSON.stringify(config, null, 2)}\n`;
   if (after === before) return;
@@ -160,12 +159,12 @@ function setupRepo(ctx, ci) {
 // ── Machine ──────────────────────────────────────────────────────────────────
 
 function installHomeFiles(home, { log, hasCursor }) {
-  home.sync(path.join(ASSETS, 'rules', 'nomos.md'), path.join(HOME, '.claude', 'rules', 'nomos.md'));
+  home.sync(path.join(ASSETS, 'rules', 'nomos.md'), path.join(paths.home(), '.claude', 'rules', 'nomos.md'));
   for (const name of COMMANDS) {
-    home.sync(path.join(ASSETS, 'skills', name, 'SKILL.md'), path.join(HOME, '.claude', 'commands', `${name}.md`));
+    home.sync(path.join(ASSETS, 'skills', name, 'SKILL.md'), path.join(paths.home(), '.claude', 'commands', `${name}.md`));
   }
   for (const [name, files] of Object.entries(HOME_SKILLS)) {
-    const dir = path.join(HOME, '.claude', 'skills', name);
+    const dir = path.join(paths.home(), '.claude', 'skills', name);
     const existing = path.join(dir, 'SKILL.md');
     if (fs.existsSync(existing) && !new RegExp(`^name: ${name}\\r?$`, 'm').test(fs.readFileSync(existing, 'utf8'))) {
       log(`WARN: ~/.claude/skills/${name}/ holds a different skill — left untouched`);
@@ -174,7 +173,7 @@ function installHomeFiles(home, { log, hasCursor }) {
     for (const file of files) home.sync(path.join(ASSETS, 'skills', name, file), path.join(dir, file));
   }
   if (hasCursor) {
-    home.sync(path.join(ASSETS, 'editors', 'cursor', 'frontend-skills.mdc'), path.join(HOME, '.cursor', 'rules', 'frontend-skills.mdc'));
+    home.sync(path.join(ASSETS, 'editors', 'cursor', 'frontend-skills.mdc'), path.join(paths.home(), '.cursor', 'rules', 'frontend-skills.mdc'));
   }
 }
 
@@ -182,13 +181,13 @@ function installHomeFiles(home, { log, hasCursor }) {
 function installDesignStack(home, { dryRun, log, hasCursor }) {
   const editors = hasCursor ? ['.claude', '.cursor'] : ['.claude'];
   for (const name of DESIGN_SKILLS) {
-    const dest = path.join(HOME, '.agents', 'skills', name);
+    const dest = path.join(paths.home(), '.agents', 'skills', name);
     if (!dryRun) fs.rmSync(dest, { recursive: true, force: true });
     home.copyTree(path.join(ASSETS, 'skills', name), dest);
-    for (const base of [...editors, '.github']) home.link(dest, path.join(HOME, base, 'skills', name));
+    for (const base of [...editors, '.github']) home.link(dest, path.join(paths.home(), base, 'skills', name));
   }
   for (const base of editors) {
-    const dest = path.join(HOME, base, 'skills', 'ui-patterns');
+    const dest = path.join(paths.home(), base, 'skills', 'ui-patterns');
     if (!dryRun) fs.rmSync(dest, { recursive: true, force: true });
     home.copyTree(path.join(ASSETS, 'skills', 'ui-patterns'), dest);
   }
@@ -197,7 +196,7 @@ function installDesignStack(home, { dryRun, log, hasCursor }) {
 
 function setupMachine({ dryRun, log }) {
   // Read before any write: later steps create ~/.cursor paths and would fake a Cursor install.
-  const hasCursor = fs.existsSync(path.join(HOME, '.cursor'));
+  const hasCursor = fs.existsSync(path.join(paths.home(), '.cursor'));
   const home = createHome({ dryRun, log, previous: legacy.previousLedger() });
   step(log, 'legacy cleanup', () => legacy.migrateHome({ dryRun, log, home }));
   step(log, 'atlas', () => {
@@ -233,4 +232,4 @@ function setup({ dryRun = false, root = process.env.INIT_CWD || process.cwd(), c
   log(`setup ${dryRun ? 'dry run ' : ''}done (v${packageVersion()})`);
 }
 
-module.exports = { setup, gitHooksDir, packageVersion, UI_DESIGN_BIN, REPO_FILES, GIT_HOOKS, COMMANDS, HOME_SKILLS, DESIGN_SKILLS, PACKAGE_ROOT };
+module.exports = { setup, gitHooksDir, packageVersion, uiDesignBin, REPO_FILES, GIT_HOOKS, COMMANDS, HOME_SKILLS, DESIGN_SKILLS, PACKAGE_ROOT };

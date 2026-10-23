@@ -3,9 +3,9 @@
 // Installs the 12 exo-* agents and enforces them as the only roster (Claude Code + Cursor).
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const paths = require('./paths');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 const SRC = path.join(PACKAGE_ROOT, 'assets', 'agents');
@@ -57,7 +57,7 @@ function registerCursorHooks(hooksPath, command) {
 }
 
 function installAgents({ dryRun = false, log = () => {}, hasCursor } = {}) {
-  const home = os.homedir();
+  const home = paths.home();
   const stateDir = path.join(home, '.claude', 'exonous');
   const guardPath = path.join(stateDir, GUARD);
   const agentFiles = fs.readdirSync(SRC).filter((f) => /^exo-.+\.md$/.test(f));

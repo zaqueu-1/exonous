@@ -5,8 +5,8 @@
 // gsd-* namespace), its hooks/statusline/permissions in Claude settings and its Cursor hooks.
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const paths = require('../lib/paths');
 
 const RUNTIMES = ['.claude', '.cursor'];
 const ROOT_ENTRIES = [
@@ -113,7 +113,7 @@ function editJson(file, mutate, { dryRun, log }) {
   }
   const changes = mutate(data);
   if (!changes.length) return;
-  const shown = `~/${path.relative(os.homedir(), file)}`;
+  const shown = `~/${path.relative(paths.home(), file)}`;
   if (dryRun) {
     for (const change of changes) log(`DRY: would update ${shown}: ${change}`);
     return;
@@ -122,7 +122,7 @@ function editJson(file, mutate, { dryRun, log }) {
   for (const change of changes) log(`${shown}: ${change}`);
 }
 
-function removeWorkflowEngine({ dryRun = false, log = () => {}, home = os.homedir() } = {}) {
+function removeWorkflowEngine({ dryRun = false, log = () => {}, home = paths.home() } = {}) {
   for (const runtime of RUNTIMES) {
     const configDir = path.join(home, runtime);
     if (!fs.existsSync(configDir)) continue;

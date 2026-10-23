@@ -5,10 +5,10 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { RELEASE_REF, latestRelease } = require('./lib/release');
 
 const NAME = 'exonous';
 const LEGACY_NAMES = ['@tron/claude-config'];
-const RELEASE_REF = /^v(\d+)\.(\d+)\.(\d+)$/;
 const LOCK_STALE_MS = 10 * 60 * 1000;
 const PM_COMMANDS = {
   npm: { add: ['install', '--save-dev', '--no-audit', '--no-fund'], remove: ['uninstall'], install: ['install', '--no-audit', '--no-fund'] },
@@ -58,26 +58,6 @@ function remoteUrl(base) {
   return slug ? `https://github.com/${slug[1].replace(/\.git$/, '')}.git` : null;
 }
 
-function compareVersions(a, b) {
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
-  return 0;
-}
-
-function latestRelease(url) {
-  const out = execFileSync('git', ['ls-remote', '--tags', '--refs', url, 'v*'], {
-    encoding: 'utf8',
-    timeout: 30000,
-    stdio: ['ignore', 'pipe', 'ignore'],
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-  });
-  const versions = out.split('\n')
-    .map((line) => RELEASE_REF.exec(line.split('refs/tags/')[1] || ''))
-    .filter(Boolean)
-    .map((m) => [Number(m[1]), Number(m[2]), Number(m[3])])
-    .sort(compareVersions);
-  return versions.length ? versions[versions.length - 1].join('.') : null;
-}
-
 function installedVersion(root) {
   for (const name of [NAME, ...LEGACY_NAMES]) {
     const pkg = readJson(path.join(root, 'node_modules', name, 'package.json'));
@@ -118,7 +98,7 @@ function update({ root = process.cwd(), check = false } = {}) {
   if (ref && !RELEASE_REF.test(ref)) return { status: 'pinned', from: ref };
   const url = remoteUrl(base);
   if (!url) return { status: 'unknown-source' };
-  const latest = latestRelease(url);
+  const latest = latestRelease(url)?.version;
   if (!latest) return { status: 'no-release' };
 
   const installed = installedVersion(root);

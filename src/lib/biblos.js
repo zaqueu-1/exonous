@@ -9,7 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
+const paths = require('./paths');
 
 const SERVER_KEY = 'biblos';
 const ENGINE_URL = 'https://mcp.context7.com/mcp';
@@ -20,7 +20,7 @@ function log(msg) {
 }
 
 function targets() {
-  const home = os.homedir();
+  const home = paths.home();
   return [
     { file: path.join(home, '.claude.json'), entry: { type: 'http', url: ENGINE_URL } },
     { file: path.join(home, '.cursor', 'mcp.json'), entry: { url: ENGINE_URL }, onlyIfDir: path.join(home, '.cursor') },

@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { test } = require('node:test');
-const { createHome, homeRel, sha256 } = require('../src/lib/home');
+const { createHome, homeRel, readLedger, sha256 } = require('../src/lib/home');
 
 function sandbox() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'home-'));
@@ -40,4 +40,20 @@ test('a missing source marks the ledger incomplete instead of throwing', () => {
   home.sync(path.join(path.dirname(dest), 'missing.md'), dest);
   assert.strictEqual(home.ledger.complete, false);
   assert.ok(logs.some((m) => m.includes('not synced')));
+});
+
+test('EXONOUS_HOME set after load moves the ledger and home-relative paths', () => {
+  const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'home-env-'));
+  const prev = process.env.EXONOUS_HOME;
+  process.env.EXONOUS_HOME = fake;
+  try {
+    const ledger = path.join(fake, '.claude', 'exonous', 'installed.json');
+    fs.mkdirSync(path.dirname(ledger), { recursive: true });
+    fs.writeFileSync(ledger, JSON.stringify({ files: { '.claude/x.md': 'abc' } }));
+    assert.deepStrictEqual(readLedger(), { '.claude/x.md': 'abc' });
+    assert.strictEqual(homeRel(path.join(fake, '.claude', 'x.md')), '.claude/x.md');
+  } finally {
+    if (prev === undefined) delete process.env.EXONOUS_HOME;
+    else process.env.EXONOUS_HOME = prev;
+  }
 });

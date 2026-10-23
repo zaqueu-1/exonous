@@ -2,17 +2,16 @@
 
 // Bridge from @tron/claude-config to exonous. Delete src/legacy/ (and its two calls in src/setup.js) one release after the bridge.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const paths = require('../lib/paths');
 const { readLedger } = require('../lib/home');
 const { removePlugins, disablePlugin } = require('../lib/techne');
 const { removeWorkflowEngine } = require('./workflow-engine');
 
-const HOME = os.homedir();
 const LEGACY_PACKAGE = '@tron/claude-config';
 const OLD_REPO = 'zaqueu-1/tron-claude-config';
 const NEW_REPO = 'zaqueu-1/exonous';
-const OLD_LEDGER = path.join(HOME, '.claude', 'tron', 'installed.json');
+const oldLedger = () => path.join(paths.home(), '.claude', 'tron', 'installed.json');
 
 const REPO_LEFTOVERS = [
   '.claude/hooks/bootstrap-check.sh',
@@ -138,13 +137,13 @@ function migrateRepo({ root, dryRun, log }) {
 
 /** The old ledger lets the first exonous run prune every file the tron release wrote. */
 function previousLedger() {
-  return readLedger() || readLedger(OLD_LEDGER) || {};
+  return readLedger() || readLedger(oldLedger()) || {};
 }
 
 function isOurSkill(target, stat, name) {
   if (stat.isSymbolicLink()) {
     const resolved = path.resolve(path.dirname(target), fs.readlinkSync(target));
-    return resolved.startsWith(path.join(HOME, '.agents', 'skills') + path.sep);
+    return resolved.startsWith(path.join(paths.home(), '.agents', 'skills') + path.sep);
   }
   if (!stat.isDirectory()) return false;
   try {
@@ -157,13 +156,13 @@ function isOurSkill(target, stat, name) {
 
 function removeOldDesign(home) {
   for (const name of OLD_DESIGN) {
-    home.remove(path.join(HOME, '.agents', 'skills', name));
-    for (const base of ['.claude', '.cursor', '.github']) home.remove(path.join(HOME, base, 'skills', name));
+    home.remove(path.join(paths.home(), '.agents', 'skills', name));
+    for (const base of ['.claude', '.cursor', '.github']) home.remove(path.join(paths.home(), base, 'skills', name));
   }
-  for (const base of ['.claude', '.cursor']) home.remove(path.join(HOME, base, 'skills', 'tron-design-fallback'));
+  for (const base of ['.claude', '.cursor']) home.remove(path.join(paths.home(), base, 'skills', 'tron-design-fallback'));
   for (const base of ['.claude', '.cursor', '.agents', '.github']) {
     for (const name of RETIRED_DESIGN_SKILLS) {
-      const target = path.join(HOME, base, 'skills', name);
+      const target = path.join(paths.home(), base, 'skills', name);
       let stat;
       try {
         stat = fs.lstatSync(target);
@@ -178,7 +177,7 @@ function removeOldDesign(home) {
 // Per-person config and caches follow the skill to its new name; the old folder goes once it holds only our files.
 function moveRenamedSkills(home, { dryRun, log }) {
   for (const [oldName, newName] of Object.entries(RENAMED_SKILLS)) {
-    const oldDir = path.join(HOME, '.claude', 'skills', oldName);
+    const oldDir = path.join(paths.home(), '.claude', 'skills', oldName);
     let stat;
     try {
       stat = fs.lstatSync(oldDir);
@@ -186,7 +185,7 @@ function moveRenamedSkills(home, { dryRun, log }) {
       continue;
     }
     if (!isOurSkill(oldDir, stat, oldName)) continue;
-    const newDir = path.join(HOME, '.claude', 'skills', newName);
+    const newDir = path.join(paths.home(), '.claude', 'skills', newName);
     for (const keep of ['config.json', 'data']) {
       const from = path.join(oldDir, keep);
       const to = path.join(newDir, keep);
@@ -205,7 +204,7 @@ function moveRenamedSkills(home, { dryRun, log }) {
 
 function dropOldGuardHooks({ dryRun, log }) {
   const isOld = (entry) => JSON.stringify(entry).includes('agent-roster-guard.js');
-  for (const file of [path.join(HOME, '.claude', 'settings.json'), path.join(HOME, '.cursor', 'hooks.json')]) {
+  for (const file of [path.join(paths.home(), '.claude', 'settings.json'), path.join(paths.home(), '.cursor', 'hooks.json')]) {
     const config = fs.existsSync(file) && readJsonFile(file);
     if (!config?.hooks) continue;
     let removed = 0;
@@ -225,26 +224,26 @@ function dropOldGuardHooks({ dryRun, log }) {
 function writeAliases(home) {
   for (const [oldName, newName] of Object.entries(ALIASES)) {
     home.write(
-      path.join(HOME, '.claude', 'commands', `${oldName}.md`),
+      path.join(paths.home(), '.claude', 'commands', `${oldName}.md`),
       `---\ndescription: Renamed to /${newName} — this alias is removed in the next exonous release.\n---\n\n\`/${oldName}\` is now \`/${newName}\`. Run /${newName} with: $ARGUMENTS\n`,
     );
   }
 }
 
 function migrateHome({ dryRun, log, home }) {
-  const oldState = path.join(HOME, '.claude', 'tron');
+  const oldState = path.join(paths.home(), '.claude', 'tron');
   // Plugin CLI calls are slow; they run only while a tron install is still on disk.
-  const firstRun = fs.existsSync(oldState) || fs.existsSync(path.join(HOME, '.claude', 'tron-kit'));
+  const firstRun = fs.existsSync(oldState) || fs.existsSync(path.join(paths.home(), '.claude', 'tron-kit'));
   const roles = path.join(oldState, 'agent-roles');
-  const newRoles = path.join(HOME, '.claude', 'exonous', 'agent-roles');
+  const newRoles = path.join(paths.home(), '.claude', 'exonous', 'agent-roles');
   if (fs.existsSync(roles) && !fs.existsSync(newRoles) && !dryRun) {
     fs.mkdirSync(path.dirname(newRoles), { recursive: true });
     fs.renameSync(roles, newRoles);
   }
   home.remove(oldState);
-  for (const rel of RETIRED_HOME_PATHS) home.remove(path.join(HOME, rel));
+  for (const rel of RETIRED_HOME_PATHS) home.remove(path.join(paths.home(), rel));
   for (const base of ['.claude', '.cursor']) {
-    const dir = path.join(HOME, base, 'agents');
+    const dir = path.join(paths.home(), base, 'agents');
     if (!fs.existsSync(dir)) continue;
     for (const file of fs.readdirSync(dir)) if (/^tron-.+\.md$/.test(file)) home.remove(path.join(dir, file));
   }

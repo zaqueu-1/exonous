@@ -3,15 +3,14 @@
 // exonous uninstall: removes what setup wrote. Keeps MCP registrations (atlas, biblos) and per-person
 // config (project-memory vault, session-handoff, issue-board) — those are the user's, not ours.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const paths = require('./lib/paths');
 const readline = require('readline');
-const { createHome, readLedger, STATE_DIR } = require('./lib/home');
+const { createHome, readLedger } = require('./lib/home');
 const { removePlugins, PLUGIN_ID, MARKETPLACE } = require('./lib/techne');
 const { REPO_FILES, GIT_HOOKS, DESIGN_SKILLS } = require('./setup');
 const { detectPm, findDependency } = require('./update');
 
-const HOME = os.homedir();
 
 function log(msg) {
   process.stdout.write(`[exonous] ${msg}\n`);
@@ -37,7 +36,7 @@ function removeRepo(root, home) {
 }
 
 function dropTaxisHooks() {
-  for (const file of [path.join(HOME, '.claude', 'settings.json'), path.join(HOME, '.cursor', 'hooks.json')]) {
+  for (const file of [path.join(paths.home(), '.claude', 'settings.json'), path.join(paths.home(), '.cursor', 'hooks.json')]) {
     let config;
     try {
       config = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -56,23 +55,23 @@ function dropTaxisHooks() {
 
 function removeMachine(home) {
   for (const rel of Object.keys(readLedger() || {})) {
-    home.remove(path.join(HOME, rel));
-    if (fs.existsSync(path.join(HOME, `${rel}.bak`))) log(`kept your backup ~/${rel}.bak`);
+    home.remove(path.join(paths.home(), rel));
+    if (fs.existsSync(path.join(paths.home(), `${rel}.bak`))) log(`kept your backup ~/${rel}.bak`);
   }
   for (const base of ['.claude', '.cursor']) {
-    const dir = path.join(HOME, base, 'agents');
+    const dir = path.join(paths.home(), base, 'agents');
     if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) if (/^exo-.+\.md$/.test(f)) home.remove(path.join(dir, f));
-    home.remove(path.join(HOME, base, 'skills', 'ui-patterns'));
+    home.remove(path.join(paths.home(), base, 'skills', 'ui-patterns'));
   }
   for (const name of DESIGN_SKILLS) {
-    home.remove(path.join(HOME, '.agents', 'skills', name));
-    for (const base of ['.claude', '.cursor', '.github']) home.remove(path.join(HOME, base, 'skills', name));
+    home.remove(path.join(paths.home(), '.agents', 'skills', name));
+    for (const base of ['.claude', '.cursor', '.github']) home.remove(path.join(paths.home(), base, 'skills', name));
   }
-  home.remove(path.join(HOME, '.cursor', 'rules', 'nomos.mdc'));
+  home.remove(path.join(paths.home(), '.cursor', 'rules', 'nomos.mdc'));
   dropTaxisHooks();
   removePlugins([PLUGIN_ID], [MARKETPLACE], { log });
-  home.remove(path.join(HOME, '.claude', 'techne'));
-  home.remove(STATE_DIR);
+  home.remove(path.join(paths.home(), '.claude', 'techne'));
+  home.remove(paths.exoDir());
 }
 
 async function uninstall({ root = process.cwd(), yes = false } = {}) {

@@ -3,22 +3,24 @@
 // Home-file ledger: a hash per written file, so an upgrade deletes files a release dropped and keeps the ones the user edited.
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const paths = require('./paths');
 
-const STATE_DIR = path.join(os.homedir(), '.claude', 'exonous');
-const LEDGER_PATH = path.join(STATE_DIR, 'installed.json');
 const EXECUTABLE_EXTS = new Set(['', '.sh', '.cmd']);
+
+function ledgerPath() {
+  return path.join(paths.exoDir(), 'installed.json');
+}
 
 function sha256(content) {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
 function homeRel(abs) {
-  return path.relative(os.homedir(), abs).split(path.sep).join('/');
+  return path.relative(paths.home(), abs).split(path.sep).join('/');
 }
 
-function readLedger(file = LEDGER_PATH) {
+function readLedger(file = ledgerPath()) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8')).files || {};
   } catch {
@@ -137,7 +139,7 @@ function createHome({ dryRun = false, log, previous }) {
     } else {
       for (const [rel, hash] of Object.entries(ledger.previous)) {
         if (rel in ledger.current) continue;
-        const target = path.join(os.homedir(), rel);
+        const target = path.join(paths.home(), rel);
         if (!fs.existsSync(target)) continue;
         if (sha256(fs.readFileSync(target)) !== hash) {
           log(`kept ~/${rel} (edited since install; no longer managed)`);
@@ -147,11 +149,11 @@ function createHome({ dryRun = false, log, previous }) {
       }
     }
     if (dryRun) return;
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(LEDGER_PATH, `${JSON.stringify({ version, files: ledger.current }, null, 2)}\n`, 'utf8');
+    fs.mkdirSync(paths.exoDir(), { recursive: true });
+    fs.writeFileSync(ledgerPath(), `${JSON.stringify({ version, files: ledger.current }, null, 2)}\n`, 'utf8');
   }
 
   return { write, sync, copyTree, link, remove, prune, ledger };
 }
 
-module.exports = { createHome, readLedger, homeRel, sha256, STATE_DIR, LEDGER_PATH };
+module.exports = { createHome, readLedger, homeRel, sha256, ledgerPath };
