@@ -140,7 +140,7 @@ test('help, logs and non-commit commands are never gated', () => {
 test('a leading cd decides which repo the token belongs to', () => {
   const fx = setup();
   fx.mint('commit');
-  assert.strictEqual(run('commit', claude(`cd ${fx.dir} && git commit -m x`, os.tmpdir()), fx.env).code, 0);
+  assert.strictEqual(run('commit', claude(`cd '${fx.dir}' && git commit -m x`, os.tmpdir()), fx.env).code, 0);
 });
 
 test('every adapter fixture is gated with its own deny format', () => {
