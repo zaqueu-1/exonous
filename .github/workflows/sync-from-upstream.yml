@@ -2,9 +2,9 @@ name: Sync from upstream
 
 # Runs ONLY on quanthubbr/tron-claude-config — pulls main + tags from the canonical repo.
 # Configure on the mirror repo (Settings → Secrets → Actions):
-#   UPSTREAM_TOKEN (optional) — only if zaqueu-1/tron-claude-config is private
+#   UPSTREAM_TOKEN (optional) — only if zaqueu-1/exonous is private
 #
-# On zaqueu-1/tron-claude-config this job is skipped (if guard below).
+# On zaqueu-1/exonous this job is skipped (if guard below).
 
 on:
   schedule:
@@ -24,7 +24,7 @@ jobs:
 
       - name: Fast-forward from canonical upstream
         env:
-          UPSTREAM_REPO: zaqueu-1/tron-claude-config
+          UPSTREAM_REPO: zaqueu-1/exonous
           UPSTREAM_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
         run: |
           set -euo pipefail
