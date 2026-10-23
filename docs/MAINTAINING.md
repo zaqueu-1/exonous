@@ -39,6 +39,14 @@ Install and uninstall write into other tools' configs under the real home. Never
 - `EXONOUS_TEST=1` plus a redirected home unlocks the test seams (`EXONOUS_RELEASE_SOURCE=file://…` for a local bare release repo, `EXONOUS_UPDATE_TEST_PM=1` for PATH shims of npm/pnpm/bun). Never set them outside a test.
 - `config.json`, `agent-roles` and the skills' own config files are the user's: install and uninstall never overwrite or delete them.
 
+## CI
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`.
+
+- **test:** Ubuntu, macOS and Windows on Node 20 and 22, plus Ubuntu on Node 18. Steps run in bash and call `node --test test/*.test.js` directly: `npm test` goes through cmd.exe on Windows, which leaves the glob unexpanded. `core.autocrlf` is off so checkouts keep LF.
+- **wsl:** Ubuntu-24.04 under WSL on a Windows runner. It copies the repo to the Linux filesystem (`/mnt/*` has no POSIX modes) and exports the temp-home env itself, since Windows variables do not cross into WSL. It has `continue-on-error: true`; remove it after the first green run.
+- Both jobs set `EXONOUS_HOME`, `HOME`, `EXONOUS_NO_UPDATE=1` and a null `GIT_CONFIG_GLOBAL`, as in the safety rules above.
+
 ## Adding a tool adapter
 
 1. Create `src/adapters/<id>.js` exporting:
@@ -119,7 +127,7 @@ Shipped content is our own text; provenance lives only in `maintainer/pege/sourc
 - `npm run pege:watch [-- <id>]` mirrors each upstream into `maintainer/pege/.cache/`, diffs pin → HEAD on the watched paths and writes `maintainer/pege/reports/<date>-<id>.md`.
 - Port a change by re-expressing it in our words, then `npm run pege:watch -- --accept <id> [--ref <sha>]`.
 - `npm run pege:originality [-- <id>]` fails on shared 8-word runs or upstream names (`brandTerms`). Run it after every port and before every release.
-- The design engine stays vendored under `assets/skills/ui-design/scripts/` behind the `ui-design` wrapper (no telemetry, no self-update) with its `ENGINE-LICENSE`.
+- The design engine stays vendored under `assets/skills/ui-design/scripts/` behind the `ui-design.mjs` wrapper (the `ui-design` sh script is a thin shim that execs it; no telemetry, no self-update) with its `ENGINE-LICENSE`.
 
 ## The quanthub mirror
 

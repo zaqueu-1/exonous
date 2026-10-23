@@ -9,7 +9,8 @@ Ship UI with a point of view: complete artifacts, brief-aligned craft, bounded v
 
 ## Setup
 
-1. Once per session: `<skill-dir>/scripts/ui-design context` (project cwd; optional `--target`). Obey directives; do not repeat context.
+0. Engine CLI: `node <skill-dir>/scripts/ui-design.mjs <verb>` on every OS; `<skill-dir>/scripts/ui-design <verb>` in playbooks means this command (the bare `ui-design` file is a POSIX-only shim).
+1. Once per session: `node <skill-dir>/scripts/ui-design.mjs context` (project cwd; optional `--target`). Obey directives; do not repeat context.
 2. Open the playbook for the invoked subcommand (table below) or the new-work playbook for greenfield/rebrand. Inspect incumbent visuals first; use fixtures if runtime unavailable.
 3. Before any UI edit post-direction: craft-floor playbook.
 
@@ -51,7 +52,7 @@ Bare invoke → routing playbook menu (never auto-run). Named cmd → load playb
 
 `teach` = init. After init, skip context rerun; native platform refs load from init when needed.
 
-Pin: `<skill-dir>/scripts/ui-design pin …`. Hooks: `/ui-design hooks …` → hooks playbook. Doctor: `/ui-design doctor` → doctor playbook. Report `CONTEXT_STALE`; never silent repair unless user asks or `auto` severity.
+Pin: `node <skill-dir>/scripts/ui-design.mjs pin …`. Hooks: `/ui-design hooks …` → hooks playbook. Doctor: `/ui-design doctor` → doctor playbook. Report `CONTEXT_STALE`; never silent repair unless user asks or `auto` severity.
 
 ## Style modules
 

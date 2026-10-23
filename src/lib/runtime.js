@@ -39,7 +39,7 @@ function packageVersion() {
 }
 
 // POSIX separators: the path is spliced into JSON hook templates and sh commands.
-const uiDesignBin = () => path.join(paths.home(), '.agents', 'skills', 'ui-design', 'scripts', 'ui-design').replaceAll('\\', '/');
+const uiDesignBin = () => path.join(paths.home(), '.agents', 'skills', 'ui-design', 'scripts', 'ui-design.mjs').replaceAll('\\', '/');
 
 /** One argument for the shell that runs hook commands (sh; cmd.exe on Windows). */
 function shellQuote(value, platform = process.platform) {
@@ -253,6 +253,6 @@ function writeInstallInfo({ tools, dryRun = false }) {
 
 module.exports = {
   PACKAGE_ROOT, ASSETS, SOURCE, OWNED_MARKER, COMMANDS, HOME_SKILLS, DESIGN_SKILLS, sharedSkillDir, foreignSkill,
-  packageVersion, uiDesignBin, shellQuote, hookCommand, listFiles, stageDir, installRuntime, readInstallInfo, writeInstallInfo,
+  packageVersion, uiDesignBin, shellQuote, hookCommand, findOnPath, listFiles, stageDir, installRuntime, readInstallInfo, writeInstallInfo,
   isolatedHome, devCheckout, guardTarget, setupDecision, assertOwner, INSTALL_ERROR, recordInstallError, clearInstallError, readInstallError,
 };

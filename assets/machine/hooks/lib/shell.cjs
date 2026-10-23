@@ -592,8 +592,16 @@ function gitAliases(dir) {
   return map;
 }
 
+// Same lookup order as gh's own ConfigDir: Windows keeps it under %APPDATA%.
+function ghConfigDir(env = process.env, platform = process.platform) {
+  if (env.GH_CONFIG_DIR) return env.GH_CONFIG_DIR;
+  if (env.XDG_CONFIG_HOME) return path.join(env.XDG_CONFIG_HOME, 'gh');
+  if (platform === 'win32' && env.APPDATA) return path.win32.join(env.APPDATA, 'GitHub CLI');
+  return path.join(env.HOME || home(), '.config', 'gh');
+}
+
 function ghAliases() {
-  const dir = process.env.GH_CONFIG_DIR || path.join(process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || home(), '.config'), 'gh');
+  const dir = ghConfigDir();
   const map = new Map();
   let text = '';
   try {
@@ -698,12 +706,17 @@ function isolationProblem(result, call) {
   return null;
 }
 
-/** GIT_DIR-style redirection on a gated call. */
+const GH_CONFIG_ENV = /^(GH_CONFIG_DIR|XDG_CONFIG_HOME|HOME|APPDATA|USERPROFILE)$/;
+
+/** GIT_DIR-style redirection on a gated call, or a gh config dir the alias check never read. */
 function redirectionProblem(call) {
-  const env = call.assigns.map(assignName).filter((n) => /^GIT_/.test(n));
+  const names = call.assigns.map(assignName);
+  const ghEnv = call.kind === 'pr' ? names.filter((n) => GH_CONFIG_ENV.test(n)) : [];
+  if (ghEnv.length) return `${ghEnv.join(', ')} points gh at a config the gate never read`;
+  const env = names.filter((n) => /^GIT_/.test(n));
   if (env.length) return `${env.join(', ')} points git somewhere the token never saw`;
   if (call.redirect.length) return `${call.redirect.join(', ')} points git somewhere the token never saw`;
   return null;
 }
 
-module.exports = { lex, analyze, isolationProblem, redirectionProblem, isPrinter };
+module.exports = { lex, analyze, isolationProblem, redirectionProblem, isPrinter, ghConfigDir };

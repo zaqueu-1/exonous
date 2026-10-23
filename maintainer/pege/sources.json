@@ -232,7 +232,7 @@
         ".claude/skills",
         ".claude/agents"
       ],
-      "notes": "Skill text and reference/ are tron rewrites. The compiled engine (scripts/impeccable launcher, scripts/bin/, live-browser assets, data/) stays vendored and runs only through scripts/ui-design (no telemetry, no self-update, rebranded output). Port engine bumps by replacing those files and checking the reference/ filenames the binary names (new-work, init, live, visualize, ios, android).",
+      "notes": "Skill text and reference/ are tron rewrites. The compiled engine (scripts/impeccable launcher, scripts/bin/, live-browser assets, data/) stays vendored and runs only through scripts/ui-design.mjs, with scripts/ui-design as its POSIX shim (no telemetry, no self-update, rebranded output). Port engine bumps by replacing those files and checking the reference/ filenames the binary names (new-work, init, live, visualize, ios, android).",
       "originality": {
         "upstream": [
           ".claude/skills/impeccable/**/*.md",

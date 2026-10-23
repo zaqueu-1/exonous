@@ -13,6 +13,8 @@ const { select, ADAPTERS } = require('../src/adapters');
 const { install } = require('../src/install');
 const { stripOwned } = require('../src/lib/settings');
 
+const skip = process.platform === 'win32' ? 'sh shims' : false;
+
 const FOREIGN_CLAUDE = { model: 'opus', hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'my-guard' }] }], Stop: [{ hooks: [{ type: 'command', command: 'say done' }] }] } };
 const FOREIGN_CURSOR = { version: 1, hooks: { beforeShellExecution: [{ command: 'my-cursor-guard' }], afterFileEdit: [{ command: 'fmt' }] } };
 
@@ -141,6 +143,25 @@ test('cursor: hooks, rule, skills; foreign hooks kept; nothing for cursor when i
   assert.ok(!JSON.stringify(after).includes('ui-design/scripts'));
 });
 
+test('cursor: the ui-design hook is shell-neutral and skips a missing launcher', { skip }, () => {
+  const { spawnSync } = require('child_process');
+  const { uiDesignHook } = ADAPTERS.find((a) => a.id === 'cursor');
+  const bin = `${home('.agents', 'skills', 'ui-design', 'scripts', 'ui-design.mjs')}`.replaceAll('\\', '/');
+  assert.match(uiDesignHook('C:\\node\\node.exe', 'win32'), new RegExp(`^"C:\\\\node\\\\node\\.exe" -e "[^"%]+" "${bin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" hook-before-edit$`));
+  const command = uiDesignHook(process.execPath, 'linux');
+  assert.ok(command.endsWith(`"${bin}" hook-before-edit`));
+  const missing = spawnSync('sh', ['-c', command], { encoding: 'utf8' });
+  assert.strictEqual(missing.status, 0);
+  assert.strictEqual(missing.stdout + missing.stderr, '');
+  const scripts = path.dirname(bin);
+  fs.mkdirSync(scripts, { recursive: true });
+  fs.copyFileSync(path.join(__dirname, '..', 'assets', 'skills', 'ui-design', 'scripts', 'ui-design.mjs'), bin);
+  fs.writeFileSync(path.join(scripts, 'impeccable'), 'echo "Impeccable got:$*"\nexit 5\n');
+  const ran = spawnSync('sh', ['-c', command], { encoding: 'utf8' });
+  assert.strictEqual(ran.status, 5);
+  assert.strictEqual(ran.stdout, 'ui-design got:hook-before-edit\n');
+});
+
 test('stripOwned leaves no empty hooks object behind on uninstall', () => {
   writeJson({ theme: 'x' }, '.claude', 'settings.json');
   run();
@@ -150,7 +171,7 @@ test('stripOwned leaves no empty hooks object behind on uninstall', () => {
   assert.strictEqual(stripOwned(home('.claude', 'settings.json'), { format: 'claude', ownedMarker: '/.claude/exonous/hooks/' }).status, 'unchanged');
 });
 
-test('hook commands quote the node and hook paths for the shell', () => {
+test('hook commands quote the node and hook paths for the shell', { skip }, () => {
   const { hookCommand } = require('../src/lib/runtime');
   const cmd = hookCommand('/opt/we"ird $dir/`n`\\node', 'pyle.cjs', 'auto --adapter claude');
   assert.ok(cmd.startsWith('"/opt/we\\"ird \\$dir/\\`n\\`\\\\node" "'), cmd);
@@ -159,7 +180,7 @@ test('hook commands quote the node and hook paths for the shell', () => {
   assert.strictEqual(echoed[0], '/opt/we"ird $dir/`n`\\node');
 });
 
-test('selftest fails when the registered gate denies for the wrong reason or crashes', () => {
+test('selftest fails when the registered gate denies for the wrong reason or crashes', { skip }, () => {
   const { selftest } = require('../src/adapters');
   fs.mkdirSync(home('.claude'), { recursive: true });
   run({ tools: ['claude'], execPath: process.execPath });

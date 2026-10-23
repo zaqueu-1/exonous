@@ -22,7 +22,7 @@ const LEGACY_PACKAGE = '@tron/claude-config';
 // The tron brand and the Greek skill names that English names replaced.
 const OLD_BRAND = /(?<![a-z])(?:tron|hodos|mneme|graphe|pinax|elenchos|phylax|kallos|kinesis|physis|eikon|kanon)(?![a-z])/i;
 // Vendored design engine: license-bound third-party files, not ours to rename.
-const VENDORED = /^assets\/skills\/ui-design\/scripts\/(?!ui-design$|command-metadata\.json$)/;
+const VENDORED = /^assets\/skills\/ui-design\/scripts\/(?!ui-design$|ui-design\.mjs$|command-metadata\.json$)/;
 
 const read = (f) => fs.readFileSync(f, 'utf8');
 const rel = (f) => path.relative(ROOT, f).split(path.sep).join('/');

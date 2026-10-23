@@ -82,7 +82,7 @@ test('Aider: detected by ~/.aider.conf.yml or the binary; doctor hint only, inst
   assert.deepStrictEqual(fs.readdirSync(osHome.osHome), []);
 });
 
-test('the binary on PATH also detects aider', () => {
+test('the binary on PATH also detects aider', { skip: process.platform === 'win32' ? 'sh shims' : false }, () => {
   const bin = process.env.PATH.split(path.delimiter)[0];
   fs.writeFileSync(path.join(bin, 'aider'), '#!/bin/sh\n', { mode: 0o755 });
   assert.strictEqual(byId('aider').detect(), true);

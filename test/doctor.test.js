@@ -16,6 +16,7 @@ process.env.GIT_CONFIG_GLOBAL = os.devNull;
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 
 const BIN = path.join(__dirname, '..', 'bin', 'exonous.js');
+const posixUid = process.platform === 'win32' ? 'posix uid' : false;
 const ALL_DIRS = ['.claude', '.cursor', '.gemini', '.codex', '.config/opencode', '.codeium/windsurf/memories', '.copilot', 'Documents/Cline', '.qwen', '.kiro'];
 
 function cli(args, { cwd = os.tmpdir(), env = {} } = {}) {
@@ -65,7 +66,7 @@ test('a hook script edited after install is flagged against the ledger', () => {
   assert.match(cli(['doctor']).out, /✗ hook scripts match the install \(1 changed: hooks\/pyle\.cjs\)/);
 });
 
-test('files under ~/.claude/exonous owned by another uid are listed with the chown fix', () => {
+test('files under ~/.claude/exonous owned by another uid are listed with the chown fix', { skip: posixUid }, () => {
   fs.mkdirSync(fx.home('.claude'));
   cli(['install', '--quiet']);
   assert.match(cli(['doctor']).out, /✓ files in ~\/\.claude\/exonous owned by you/);
@@ -99,7 +100,7 @@ test('a repo-mode install in the current directory points to exonous migrate', (
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'v2repo-')));
   fs.writeFileSync(path.join(repo, 'package.json'), '{"devDependencies":{"exonous":"github:zaqueu-1/exonous#v2.0.0"}}\n');
   assert.ok(!/repo-mode install in/.test(cli(['doctor'], { cwd: repo }).out), 'not a git repo yet');
-  execFileSync('git', ['init', '-q', repo], { env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+  execFileSync('git', ['init', '-q', repo], { env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' } });
   const { out } = cli(['doctor'], { cwd: repo });
   assert.match(out, new RegExp(`✗ repo-mode install in ${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(out, /fix: run `exonous migrate` here/);
@@ -112,7 +113,7 @@ test('the home is never a repo: doctor stays quiet there and migrate refuses it'
   const home = fx.home();
   const rules = path.join(home, '.claude', 'rules', 'exonous');
   const before = fs.readdirSync(rules).length;
-  execFileSync('git', ['init', '-q', home], { env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+  execFileSync('git', ['init', '-q', home], { env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' } });
   assert.ok(!/repo-mode install in/.test(cli(['doctor'], { cwd: home }).out));
   const res = cli(['migrate', '--repo', home]);
   assert.match(res.out, /home directory \(or above it\), not a repo/);

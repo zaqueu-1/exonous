@@ -110,7 +110,7 @@ test('hooks are staged in a sibling dir and swapped in whole; a failed stage kee
   assert.deepStrictEqual(fs.readdirSync(home('.claude', 'exonous')).filter((n) => /^hooks\./.test(n)), []);
 });
 
-test('install.json records the pm binary found on PATH', () => {
+test('install.json records the pm binary found on PATH', { skip: process.platform === 'win32' ? 'sh shims' : false }, () => {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-bin-'));
   fs.writeFileSync(path.join(bin, 'npm'), '#!/bin/sh\n', { mode: 0o755 });
   process.env.PATH = `${bin}${path.delimiter}${process.env.PATH}`;
