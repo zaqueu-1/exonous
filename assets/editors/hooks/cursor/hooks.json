@@ -3,7 +3,7 @@
   "hooks": {
     "preToolUse": [
       {
-        "command": "[ ! -f '__UI_DESIGN_BIN__' ] || '__UI_DESIGN_BIN__' hook-before-edit",
+        "command": "__UI_DESIGN_HOOK__",
         "timeout": 5
       }
     ]

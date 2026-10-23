@@ -6,7 +6,7 @@ const path = require('path');
 const paths = require('../lib/paths');
 const { onPath, readJson, mcpRow, installDesignLinks } = require('./shared');
 const { mergeOwned, stripOwned } = require('../lib/settings');
-const { ASSETS, OWNED_MARKER, COMMANDS, DESIGN_SKILLS, hookCommand, uiDesignBin } = require('../lib/runtime');
+const { ASSETS, OWNED_MARKER, COMMANDS, DESIGN_SKILLS, hookCommand, shellQuote, uiDesignBin } = require('../lib/runtime');
 
 const TOOL = 'cursor';
 const hooksFile = () => path.join(paths.cursorDir(), 'hooks.json');
@@ -27,8 +27,17 @@ function nomosRule() {
   return `---\ndescription: Exonous nomos — core rules and agent roster (enforced)\nalwaysApply: true\n---\n\n${rule}`;
 }
 
-function uiDesignEntries() {
-  const template = fs.readFileSync(path.join(ASSETS, 'editors', 'hooks', 'cursor', 'hooks.json'), 'utf8').replaceAll('__UI_DESIGN_BIN__', uiDesignBin());
+// Shell-neutral (sh and cmd.exe): node itself skips a missing launcher, then loads it with the hook verb in argv.
+const UI_DESIGN_GUARD = "const f=process.argv[1];if(require('fs').existsSync(f))import(require('url').pathToFileURL(f))";
+
+function uiDesignHook(execPath, platform = process.platform) {
+  const q = (value) => shellQuote(value, platform);
+  return `${q(execPath)} -e ${q(UI_DESIGN_GUARD)} ${q(uiDesignBin())} hook-before-edit`;
+}
+
+function uiDesignEntries(execPath) {
+  const template = fs.readFileSync(path.join(ASSETS, 'editors', 'hooks', 'cursor', 'hooks.json'), 'utf8')
+    .replaceAll('"__UI_DESIGN_HOOK__"', JSON.stringify(uiDesignHook(execPath)));
   return JSON.parse(template).hooks;
 }
 
@@ -46,7 +55,7 @@ function install({ home, dryRun, log, execPath }) {
     sessionStart: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter cursor') }],
   };
   mergeOwned(hooksFile(), { format: 'cursor', entries: gate, ownedMarker: OWNED_MARKER, dryRun, log });
-  mergeOwned(hooksFile(), { format: 'cursor', entries: uiDesignEntries(), ownedMarker: '/.agents/skills/ui-design/scripts/', dryRun, log });
+  mergeOwned(hooksFile(), { format: 'cursor', entries: uiDesignEntries(execPath), ownedMarker: '/.agents/skills/ui-design/scripts/', dryRun, log });
 }
 
 function uninstall({ dryRun, log }) {
@@ -86,4 +95,4 @@ function doctor() {
   ];
 }
 
-module.exports = { id: TOOL, tier: 1, gate: 'hard', detect, install, uninstall, doctor, registeredCommand, selftestPayload };
+module.exports = { id: TOOL, tier: 1, gate: 'hard', detect, install, uninstall, doctor, registeredCommand, selftestPayload, uiDesignHook };

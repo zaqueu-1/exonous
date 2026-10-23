@@ -9,7 +9,7 @@ On ANY frontend/UI task — pages, components, styling, layout, redesign, polish
 
 **Source of truth for DESIGN** = the design stack (`~/.agents/skills/<name>/SKILL.md`, symlinked into `~/.claude/skills/` and `~/.cursor/skills/`):
 
-1. **`ui-design`** — always first. Direction, modes, critique/audit, refine commands, live iteration, and the hook-enforced detector (`scripts/ui-design`). Style modules in `reference/styles/` (direction for landing/portfolio/marketing, redesign for brownfield, premium/minimalist/brutalist when the brief asks). Dashboards and tools follow its Operate mode, not the style modules.
+1. **`ui-design`** — always first. Direction, modes, critique/audit, refine commands, live iteration, and the hook-enforced detector (`node scripts/ui-design.mjs`). Style modules in `reference/styles/` (direction for landing/portfolio/marketing, redesign for brownfield, premium/minimalist/brutalist when the brief asks). Dashboards and tools follow its Operate mode, not the style modules.
 2. **`ui-motion`** — any animation, transition, gesture, toast, or interaction-feel work (web and Expo).
 3. **`native-ui`** — iOS/Android/desktop-native feel, Apple-quality design, Swift/SwiftUI.
 4. **`ui-mockup`** — image-model comps, image-to-code, brand kits — only when the brief calls for imagery.
