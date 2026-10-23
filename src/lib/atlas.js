@@ -11,13 +11,18 @@ const { execFileSync, execSync, spawnSync } = require('child_process');
 
 const SERVER_KEY = 'atlas';
 const ENGINE = 'codebase-memory-mcp';
-// Bump together: tag, both installer digests (sha256 of the files at that tag) and the npm fallback version.
+// Bump together: tag, the three digests (installers + release checksums.txt) and the npm fallback version.
 const ENGINE_VERSION = '0.12.1';
 const ENGINE_SOURCE = `https://raw.githubusercontent.com/DeusData/${ENGINE}/v${ENGINE_VERSION}`;
 const ENGINE_RELEASE = `https://github.com/DeusData/${ENGINE}/releases/download/v${ENGINE_VERSION}`;
 const INSTALLERS = {
   sh: { url: `${ENGINE_SOURCE}/install.sh`, sha256: '13049c7cc51bc508d68b8ecb8a9fd9574ecb7c6f2c9dd5a19bf7d4c187321145' },
   ps1: { url: `${ENGINE_SOURCE}/install.ps1`, sha256: 'edc5e194702e21b01d38648a25d44d783022bba992b5fb62b08528e2c71ca370' },
+};
+// The installers verify the binary archive against this file, so pinning it pins the binary.
+const RELEASE_CHECKSUMS = {
+  url: `${ENGINE_RELEASE}/checksums.txt`,
+  sha256: '103ddf75ccbe4e4de9faa57f074ee5f16b88edab6fd2f7dfd34e50d147dddffe',
 };
 const MAX_ATTEMPTS = 3;
 const ATTEMPT_TIMEOUT_MS = 120000;
@@ -118,8 +123,8 @@ function verifySha256(file, expected) {
   }
 }
 
-/** Downloads a pinned installer to a private temp dir and runs it only if its digest matches. */
-function withVerifiedInstaller({ url, sha256 }, run) {
+/** Downloads a pinned file to a private temp dir and hands it on only if its digest matches. */
+function withVerifiedDownload({ url, sha256 }, run) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-'));
   const file = path.join(dir, path.basename(url));
   try {
@@ -135,6 +140,11 @@ function withVerifiedInstaller({ url, sha256 }, run) {
 }
 
 const installerEnv = () => ({ ...process.env, CBM_DOWNLOAD_URL: ENGINE_RELEASE });
+
+/** Runs a pinned installer only after the release's checksums.txt still matches its pin. */
+function withVerifiedInstaller(installer, run) {
+  withVerifiedDownload(RELEASE_CHECKSUMS, () => withVerifiedDownload(installer, run));
+}
 
 function runUnixInstaller() {
   withVerifiedInstaller(INSTALLERS.sh, (script) => {
@@ -248,7 +258,7 @@ function ensureAtlas(options = {}) {
   return { ok: false, attempts: MAX_ATTEMPTS };
 }
 
-module.exports = { ensureAtlas, verifySha256, INSTALLERS, ENGINE_RELEASE };
+module.exports = { ensureAtlas, verifySha256, INSTALLERS, RELEASE_CHECKSUMS, ENGINE_RELEASE };
 
 if (require.main === module) {
   const result = ensureAtlas({ force: process.argv.includes('--force'), dryRun: process.argv.includes('--dry-run') });

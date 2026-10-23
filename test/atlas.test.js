@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { test } = require('node:test');
-const { verifySha256, INSTALLERS, ENGINE_RELEASE } = require('../src/lib/atlas');
+const { verifySha256, INSTALLERS, RELEASE_CHECKSUMS, ENGINE_RELEASE } = require('../src/lib/atlas');
 
 function fixture(content) {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-')), 'install.sh');
@@ -21,6 +21,8 @@ test('installers and the binary release are pinned to one tag', () => {
     assert.match(sha256, /^[0-9a-f]{64}$/);
   }
   assert.match(ENGINE_RELEASE, /\/releases\/download\/v\d+\.\d+\.\d+$/);
+  assert.strictEqual(RELEASE_CHECKSUMS.url, `${ENGINE_RELEASE}/checksums.txt`);
+  assert.match(RELEASE_CHECKSUMS.sha256, /^[0-9a-f]{64}$/);
 });
 
 test('a matching digest passes', () => {
