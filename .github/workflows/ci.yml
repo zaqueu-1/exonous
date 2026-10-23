@@ -34,6 +34,9 @@ jobs:
         run: git config --global core.autocrlf false
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # repo-migrate regenerates the v2 manifest from the v2.0.0 tag.
+          fetch-depth: 0
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -45,7 +48,8 @@ jobs:
           HOME: ${{ runner.temp }}/home
           USERPROFILE: ${{ runner.temp }}/home
           EXONOUS_NO_UPDATE: '1'
-          GIT_CONFIG_GLOBAL: ${{ runner.os == 'Windows' && 'NUL' || '/dev/null' }}
+          # Git for Windows maps this literal itself; NUL fails its config access check.
+          GIT_CONFIG_GLOBAL: /dev/null
         # Same as `npm test`, run directly: npm uses cmd.exe on Windows, which leaves the glob unexpanded.
         run: |
           mkdir -p "$EXONOUS_HOME" "$HOME"
@@ -63,6 +67,9 @@ jobs:
         run: git config --global core.autocrlf false
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # repo-migrate regenerates the v2 manifest from the v2.0.0 tag.
+          fetch-depth: 0
 
       - uses: Vampire/setup-wsl@4c48163d9f981914dd8caa0fc335fe19cca5bff4 # v7.2.0
         with:
