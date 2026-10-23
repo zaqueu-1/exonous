@@ -40,6 +40,11 @@ function findDependency(root) {
   return null;
 }
 
+function legacyDependencies(root) {
+  const pkg = readJson(path.join(root, 'package.json')) || {};
+  return LEGACY_NAMES.filter((name) => (pkg.devDependencies || {})[name] || (pkg.dependencies || {})[name]);
+}
+
 function splitSpec(spec) {
   const at = spec.indexOf('#');
   return at === -1 ? { base: spec, ref: '' } : { base: spec.slice(0, at), ref: spec.slice(at + 1) };
@@ -120,7 +125,8 @@ function update({ root = process.cwd(), check = false } = {}) {
   const target = `${base}#v${latest}`;
   const from = installed?.version;
   const inPlace = installed && path.basename(installed.dir) === NAME;
-  if (dep.name === NAME && dep.spec === target && from === latest && inPlace) return { status: 'current', to: latest };
+  const legacyDeps = legacyDependencies(root);
+  if (dep.name === NAME && dep.spec === target && from === latest && inPlace && !legacyDeps.length) return { status: 'current', to: latest };
   if (check) return { status: 'available', from, to: latest };
 
   return withLock(root, () => {
@@ -128,7 +134,13 @@ function update({ root = process.cwd(), check = false } = {}) {
     const cmds = PM_COMMANDS[pm];
     // Add before removing the legacy name: a failed add must leave the old install working.
     run(pm, [...cmds.add, `${NAME}@${target}`], root);
-    if (dep.name !== NAME) run(pm, [...cmds.remove, dep.name], root);
+    for (const name of legacyDeps) {
+      try {
+        run(pm, [...cmds.remove, name], root);
+      } catch {
+        // Non-fatal: the next update retries while the legacy name stays listed.
+      }
+    }
     // npm keeps a package installed under a key that left package.json; it would shadow the real one in kairos.
     for (const legacy of LEGACY_NAMES) {
       const dir = path.join(root, 'node_modules', legacy);
@@ -146,4 +158,4 @@ function update({ root = process.cwd(), check = false } = {}) {
   });
 }
 
-module.exports = { update, findDependency, remoteUrl, latestRelease, detectPm, splitSpec };
+module.exports = { update, findDependency, legacyDependencies, remoteUrl, latestRelease, detectPm, splitSpec };

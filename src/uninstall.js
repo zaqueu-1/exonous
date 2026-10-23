@@ -55,7 +55,10 @@ function dropTaxisHooks() {
 }
 
 function removeMachine(home) {
-  for (const rel of Object.keys(readLedger() || {})) home.remove(path.join(HOME, rel));
+  for (const rel of Object.keys(readLedger() || {})) {
+    home.remove(path.join(HOME, rel));
+    if (fs.existsSync(path.join(HOME, `${rel}.bak`))) log(`kept your backup ~/${rel}.bak`);
+  }
   for (const base of ['.claude', '.cursor']) {
     const dir = path.join(HOME, base, 'agents');
     if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) if (/^exo-.+\.md$/.test(f)) home.remove(path.join(dir, f));
