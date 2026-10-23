@@ -17,7 +17,7 @@ if (!fs.mkdtempSync.exonousTracked) {
     return dir;
   };
   fs.mkdtempSync.exonousTracked = true;
-  process.on('exit', () => {
+  const cleanup = () => {
     for (const dir of created) {
       try {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -25,7 +25,16 @@ if (!fs.mkdtempSync.exonousTracked) {
         // already gone or busy: nothing to keep
       }
     }
-  });
+    created.clear();
+  };
+  process.on('exit', cleanup);
+  // An interrupted run (Ctrl-C, node --test timeout, a killed agent) skips 'exit' unless the signal is handled.
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.once(signal, () => {
+      cleanup();
+      process.kill(process.pid, signal);
+    });
+  }
 }
 
 /** Also clean a temp path a test creates without mkdtemp (a file or a sibling like `<dir>-wt`). */
