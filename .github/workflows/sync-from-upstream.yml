@@ -1,6 +1,6 @@
 name: Sync from upstream
 
-# Runs ONLY on quanthubbr/tron-claude-config — pulls main + tags from the canonical repo.
+# Runs only on the quanthub mirror (if guard below) — pulls main + tags from the canonical repo.
 # Configure on the mirror repo (Settings → Secrets → Actions):
 #   UPSTREAM_TOKEN (optional) — only if zaqueu-1/exonous is private
 #
