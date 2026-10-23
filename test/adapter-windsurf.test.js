@@ -5,6 +5,7 @@ require('./helpers/tmp-cleanup');
 
 const assert = require('assert');
 const fs = require('fs');
+const path = require('path');
 const { test } = require('node:test');
 const { install } = require('../src/install');
 const { uninstall } = require('../src/uninstall');
@@ -109,9 +110,10 @@ test('selftest pipes a pre_run_command payload and gets exit 2', () => {
 test('Devin MCP candidates: XDG_CONFIG_HOME and %APPDATA% only for real-home installs', () => {
   const { devinMcpFiles } = windsurf;
   const home = '/h';
-  assert.deepStrictEqual(devinMcpFiles({ XDG_CONFIG_HOME: '/x' }, { platform: 'linux', redirected: false, home }), ['/x/devin/mcp_config.json', '/h/.config/devin/mcp_config.json']);
+  const homeFile = path.join(home, '.config', 'devin', 'mcp_config.json');
+  assert.deepStrictEqual(devinMcpFiles({ XDG_CONFIG_HOME: '/x' }, { platform: 'linux', redirected: false, home }), [path.join('/x', 'devin', 'mcp_config.json'), homeFile]);
   assert.deepStrictEqual(devinMcpFiles({ APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, { platform: 'win32', redirected: false, home }).length, 2);
-  assert.deepStrictEqual(devinMcpFiles({ XDG_CONFIG_HOME: '/x', APPDATA: '/a' }, { platform: 'win32', redirected: true, home }), ['/h/.config/devin/mcp_config.json']);
+  assert.deepStrictEqual(devinMcpFiles({ XDG_CONFIG_HOME: '/x', APPDATA: '/a' }, { platform: 'win32', redirected: true, home }), [homeFile]);
 });
 
 test('doctor: a missing global_rules.md is a warning, matching install', () => {

@@ -250,7 +250,7 @@ test('a dev checkout refuses to touch the real home unless asked', () => {
 
 test('setup migrates only a copy inside a git repo that depends on exonous; every other copy installs', () => {
   const { execFileSync } = require('child_process');
-  const gitInit = (dir) => execFileSync('git', ['init', '-q'], { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' } });
+  const gitInit = (dir) => execFileSync('git', ['init', '-q'], { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
   const real = fs.mkdtempSync(path.join(os.tmpdir(), 'pkg-'));
   const inRepo = path.join(real, 'app', 'node_modules', 'exonous');
   fs.mkdirSync(inRepo, { recursive: true });
@@ -345,6 +345,15 @@ test('shellQuote: POSIX escapes, cmd.exe refuses characters it would expand or s
   assert.strictEqual(shellQuote('C:\\Program Files\\nodejs\\node.exe', 'win32'), '"C:\\Program Files\\nodejs\\node.exe"');
   assert.throws(() => shellQuote('C:\\Users\\%USERNAME%\\node.exe', 'win32'), /% .*cmd\.exe/);
   assert.throws(() => shellQuote('C:\\a"b\\node.exe', 'win32'), /"/);
+});
+
+test('commandNode reads back the node path shellQuote wrote, per platform', () => {
+  const { shellQuote } = require('../src/lib/runtime');
+  const { commandNode } = require('../src/adapters');
+  const win = 'C:\\hostedtoolcache\\windows\\node\\20.20.2\\x64\\node.exe';
+  assert.strictEqual(commandNode(`${shellQuote(win, 'win32')} "C:\\h\\pyle.cjs" auto`, 'win32'), win);
+  const posix = '/opt/node $x/bin/node';
+  assert.strictEqual(commandNode(`${shellQuote(posix, 'linux')} "/h/pyle.cjs"`, 'linux'), posix);
 });
 
 

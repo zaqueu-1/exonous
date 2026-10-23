@@ -34,7 +34,7 @@ function repo(files = {}) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
     fs.writeFileSync(path.join(dir, rel), content);
   }
-  return fs.realpathSync(dir);
+  return fs.realpathSync.native(dir);
 }
 
 test('only level-2 titles outside comments and fences are required', () => {

@@ -29,7 +29,7 @@ test('temp dirs are removed when the test process ends normally', () => {
 });
 
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
-  test(`temp dirs are removed when the test process is killed with ${signal}`, () => {
+  test(`temp dirs are removed when the test process is killed with ${signal}`, { skip: process.platform === 'win32' ? 'no POSIX signals' : false }, () => {
     const { dir, signal: got } = runChild(`process.kill(process.pid, '${signal}'); setTimeout(() => {}, 5000);`);
     assert.strictEqual(got, signal, 'the process still dies from the signal');
     assert.ok(dir && !fs.existsSync(dir), `${dir} left behind`);

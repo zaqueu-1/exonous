@@ -95,7 +95,8 @@ const SELFTEST_DENY = /exonous (token|workflow)/;
 /** Temp git repo with a staged file, so the self-test commit reaches the token check. Caller removes it. */
 function selftestRepo() {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'exonous-selftest-')));
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' };
+  // Git for Windows maps the literal /dev/null; os.devNull (\\.\nul) fails its config access check.
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' };
   execFileSync('git', ['init', '-q'], { cwd: dir, env, stdio: 'ignore' });
   fs.writeFileSync(path.join(dir, 'selftest.txt'), 'exonous self-test\n');
   execFileSync('git', ['add', 'selftest.txt'], { cwd: dir, env, stdio: 'ignore' });

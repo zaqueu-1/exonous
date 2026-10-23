@@ -11,7 +11,7 @@ const { execFileSync, spawnSync } = require('child_process');
 const { test } = require('node:test');
 
 const BIN = path.join(__dirname, '..', 'bin', 'exonous.js');
-const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 
 function fixture() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-home-'));

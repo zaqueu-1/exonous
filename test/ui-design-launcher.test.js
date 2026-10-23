@@ -7,13 +7,14 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { spawnSync } = require('child_process');
 const { test } = require('node:test');
 
 const SCRIPTS = path.join(__dirname, '..', 'assets', 'skills', 'ui-design', 'scripts');
 const LAUNCHER = path.join(SCRIPTS, 'ui-design.mjs');
 const skip = process.platform === 'win32' ? 'sh fake engine' : false;
-const load = () => import(LAUNCHER);
+const load = () => import(pathToFileURL(LAUNCHER).href);
 
 const FAKE_ENGINE = `#!/bin/sh
 echo "args:$*"
