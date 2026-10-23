@@ -25,6 +25,17 @@ Then point project-memory at your vault once:
 echo '{ "vault": "/absolute/path/to/your/vault" }' > ~/.claude/skills/project-memory/config.json
 ```
 
+## Platforms
+
+| | Notes |
+|---|---|
+| macOS | full support |
+| Linux | full support; `issue-board` needs Python 3 |
+| Windows (native) | full support; the gate parses `sh`-grammar commands. The first `ui-design` run before the engine is cached refuses arguments containing `"` or `%` |
+| WSL | full support |
+
+CI runs the test suite on Ubuntu, macOS, Windows and WSL.
+
 ## Supported tools
 
 | Tool | Gate | Rules | Commands | MCP | Update |
