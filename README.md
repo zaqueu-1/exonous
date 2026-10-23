@@ -13,7 +13,7 @@ Exonous is installed once per machine and active in every project of every suppo
 Needs Node 18+ and git.
 
 ```bash
-npm i -g github:zaqueu-1/exonous#v2.1.1     # or: pnpm add -g … / bun add -g …
+npm i -g github:zaqueu-1/exonous#v2.1.2     # or: pnpm add -g … / bun add -g …
 exonous install
 ```
 
