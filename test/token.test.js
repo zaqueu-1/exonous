@@ -12,7 +12,7 @@ const { test, beforeEach, afterEach } = require('node:test');
 const token = require('../assets/machine/hooks/lib/token.cjs');
 const { repoKey, stateDir } = require('../assets/machine/hooks/lib/paths.cjs');
 
-const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 let prevHome;
@@ -111,7 +111,7 @@ test('concurrent consumers: exactly one wins the token', async () => {
   assert.strictEqual(results.filter((r) => r.ok).length, 1);
 });
 
-test('minting refuses when the exonous dir belongs to another uid (no root-owned token files)', () => {
+test('minting refuses when the exonous dir belongs to another uid (no root-owned token files)', { skip: process.platform === 'win32' ? 'no uids' : false }, () => {
   const dir = repo();
   token.mint('commit', dir);
   const saved = { t: process.env.EXONOUS_TEST, u: process.env.EXONOUS_TEST_UID };

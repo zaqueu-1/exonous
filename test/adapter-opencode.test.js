@@ -172,13 +172,18 @@ test('selftest reports a temp-repo failure instead of throwing', () => {
   seed();
   run();
   const saved = process.env.PATH;
-  process.env.PATH = path.dirname(process.execPath);
+  // A distro node lives in /usr/bin next to git, so PATH gets a dir holding only node.
+  const nodeOnly = fs.mkdtempSync(path.join(os.tmpdir(), 'node-only-'));
+  if (process.platform === 'win32') fs.copyFileSync(process.execPath, path.join(nodeOnly, 'node.exe'));
+  else fs.symlinkSync(process.execPath, path.join(nodeOnly, 'node'));
+  process.env.PATH = nodeOnly;
   try {
     const res = selftest(opencode);
     assert.strictEqual(res.ok, false);
     assert.match(res.detail, /could not create a temp git repo/);
   } finally {
     process.env.PATH = saved;
+    fs.rmSync(nodeOnly, { recursive: true, force: true });
   }
 });
 
