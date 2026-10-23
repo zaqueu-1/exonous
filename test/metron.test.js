@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { test } = require('node:test');
-const { advise, LINE_LIMIT } = require('../assets/repo/claude/hooks/lib/metron.cjs');
+const { advise, LINE_LIMIT } = require('../assets/machine/hooks/lib/metron.cjs');
 
 function fixture(lines) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'metron-'));

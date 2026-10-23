@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const test = require('node:test');
 const assert = require('assert');
 const fs = require('fs');
@@ -120,4 +122,27 @@ test('edit tracker feeds stop checks, which flag console.log without failing', (
   assert.match(res.stderr, /a\.ts:2/);
   assert.strictEqual(hook('stop:checks', { session_id: session, cwd: dir }).stderr, '', 'list is consumed once');
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('removing the techne plugin from settings.json leaves no empty containers it created', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'techne-home-'));
+  const prev = { EXONOUS_HOME: process.env.EXONOUS_HOME, PATH: process.env.PATH };
+  process.env.EXONOUS_HOME = home;
+  process.env.PATH = '/usr/bin:/bin';
+  try {
+    const file = path.join(home, '.claude', 'settings.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const { removePlugins, PLUGIN_ID, MARKETPLACE } = require('../src/lib/techne');
+    fs.writeFileSync(file, JSON.stringify({ theme: 'x', enabledPlugins: { [PLUGIN_ID]: true }, extraKnownMarketplaces: { [MARKETPLACE]: { source: {} } } }));
+    removePlugins([PLUGIN_ID], [MARKETPLACE], { log: () => {} });
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { theme: 'x' });
+    fs.writeFileSync(file, JSON.stringify({ enabledPlugins: { [PLUGIN_ID]: true, 'other@m': true }, extraKnownMarketplaces: {} }));
+    removePlugins([PLUGIN_ID], [MARKETPLACE], { log: () => {} });
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { enabledPlugins: { 'other@m': true }, extraKnownMarketplaces: {} }, 'containers that were not emptied by us stay');
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 });

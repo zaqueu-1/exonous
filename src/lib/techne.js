@@ -3,15 +3,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const paths = require('./paths');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 const KIT_SRC = path.join(PACKAGE_ROOT, 'assets', 'techne');
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
-const KIT_DEST = path.join(CLAUDE_DIR, 'techne');
-const SETTINGS_PATH = path.join(CLAUDE_DIR, 'settings.json');
+const kitDest = () => path.join(paths.claudeDir(), 'techne');
+const settingsPath = () => path.join(paths.claudeDir(), 'settings.json');
 const MARKETPLACE = 'exonous';
 const PLUGIN_ID = `techne@${MARKETPLACE}`;
 // `claude plugin update` skips same-version reinstalls, so content changes are detected by hash.
@@ -52,12 +51,12 @@ function listJson(args) {
 }
 
 function readSettings() {
-  if (!fs.existsSync(SETTINGS_PATH)) return {};
-  const raw = fs.readFileSync(SETTINGS_PATH, 'utf8');
+  if (!fs.existsSync(settingsPath())) return {};
+  const raw = fs.readFileSync(settingsPath(), 'utf8');
   try {
     return JSON.parse(raw);
   } catch (err) {
-    throw new Error(`${SETTINGS_PATH} is not valid JSON (${err.message}) — fix it manually; not overwriting`);
+    throw new Error(`${settingsPath()} is not valid JSON (${err.message}) — fix it manually; not overwriting`);
   }
 }
 
@@ -70,8 +69,8 @@ function editSettings(mutate, { dryRun, log }) {
     for (const change of changes) log(`DRY: would update ~/.claude/settings.json: ${change}`);
     return changes;
   }
-  fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true });
-  fs.writeFileSync(SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
+  fs.writeFileSync(settingsPath(), `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
   for (const change of changes) log(`~/.claude/settings.json: ${change}`);
   return changes;
 }
@@ -122,10 +121,10 @@ function copyKit(version, { dryRun, log }) {
     log(`DRY: would replace ~/.claude/techne/ with assets/techne (version ${version}, hash ${contentHash})`);
     return contentHash;
   }
-  fs.rmSync(KIT_DEST, { recursive: true, force: true });
-  fs.cpSync(KIT_SRC, KIT_DEST, { recursive: true, verbatimSymlinks: true });
-  stampVersion(KIT_DEST, version);
-  fs.writeFileSync(path.join(KIT_DEST, HASH_FILE), `${contentHash}\n`, 'utf8');
+  fs.rmSync(kitDest(), { recursive: true, force: true });
+  fs.cpSync(KIT_SRC, kitDest(), { recursive: true, verbatimSymlinks: true });
+  stampVersion(kitDest(), version);
+  fs.writeFileSync(path.join(kitDest(), HASH_FILE), `${contentHash}\n`, 'utf8');
   log(`techne copied → ~/.claude/techne/ (version ${version}, hash ${contentHash})`);
   return contentHash;
 }
@@ -134,11 +133,11 @@ function installViaCli(contentHash, { dryRun, log }) {
   const marketplaces = listJson(['plugin', 'marketplace', 'list']);
   const existing = marketplaces.find((m) => m.name === MARKETPLACE);
   const existingPath = existing && (existing.path || existing.installLocation);
-  const pointsElsewhere = existing && existingPath && path.resolve(existingPath) !== path.resolve(KIT_DEST);
+  const pointsElsewhere = existing && existingPath && path.resolve(existingPath) !== path.resolve(kitDest());
 
   const steps = [];
   if (pointsElsewhere) steps.push(['plugin', 'marketplace', 'remove', MARKETPLACE]);
-  if (!existing || pointsElsewhere) steps.push(['plugin', 'marketplace', 'add', KIT_DEST, '--scope', 'user']);
+  if (!existing || pointsElsewhere) steps.push(['plugin', 'marketplace', 'add', kitDest(), '--scope', 'user']);
   steps.push(['plugin', 'marketplace', 'update', MARKETPLACE]);
 
   const installed = listJson(['plugin', 'list']).find((p) => p.id === PLUGIN_ID && p.scope === 'user');
@@ -168,9 +167,9 @@ function registerViaSettings({ dryRun, log }) {
     const changes = [];
     settings.extraKnownMarketplaces = settings.extraKnownMarketplaces || {};
     const current = settings.extraKnownMarketplaces[MARKETPLACE];
-    if (current?.source?.source !== 'directory' || current?.source?.path !== KIT_DEST) {
-      settings.extraKnownMarketplaces[MARKETPLACE] = { source: { source: 'directory', path: KIT_DEST } };
-      changes.push(`extraKnownMarketplaces.${MARKETPLACE} → ${KIT_DEST}`);
+    if (current?.source?.source !== 'directory' || current?.source?.path !== kitDest()) {
+      settings.extraKnownMarketplaces[MARKETPLACE] = { source: { source: 'directory', path: kitDest() } };
+      changes.push(`extraKnownMarketplaces.${MARKETPLACE} → ${kitDest()}`);
     }
     settings.enabledPlugins = settings.enabledPlugins || {};
     if (settings.enabledPlugins[PLUGIN_ID] !== true) {
@@ -232,18 +231,19 @@ function uninstallViaCli(ids, marketplaces, { dryRun, log }) {
 function cleanPluginSettings(ids, marketplaces, { dryRun, log }) {
   editSettings((settings) => {
     const changes = [];
-    for (const id of ids) {
-      if (settings.enabledPlugins && id in settings.enabledPlugins) {
-        delete settings.enabledPlugins[id];
-        changes.push(`removed enabledPlugins["${id}"]`);
+    const drop = (key, names, label) => {
+      const map = settings[key];
+      if (!map || typeof map !== 'object') return;
+      const hits = names.filter((n) => n in map);
+      for (const n of hits) {
+        delete map[n];
+        changes.push(`removed ${key}${label(n)}`);
       }
-    }
-    for (const name of marketplaces) {
-      if (settings.extraKnownMarketplaces && name in settings.extraKnownMarketplaces) {
-        delete settings.extraKnownMarketplaces[name];
-        changes.push(`removed extraKnownMarketplaces.${name}`);
-      }
-    }
+      // Registration created the container; once our entry leaves it empty, it goes too.
+      if (hits.length && !Object.keys(map).length) delete settings[key];
+    };
+    drop('enabledPlugins', ids, (id) => `["${id}"]`);
+    drop('extraKnownMarketplaces', marketplaces, (name) => `.${name}`);
     return changes;
   }, { dryRun, log });
 }

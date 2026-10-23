@@ -121,4 +121,4 @@ Issues: <critical> critical, <high> high, <medium> medium, <low> low
 ## Notes
 
 - Prefer project rules in `CLAUDE.md`, `AGENTS.md`, and `.claude/rules/` when judging pattern compliance.
-- For `/commit-changes`, Local Review Mode is the default and must run before creating `.claude/.commit-authorized`.
+- For `/commit-changes`, Local Review Mode is the default and must run before `exonous token commit`.

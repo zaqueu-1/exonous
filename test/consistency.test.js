@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 // Guards what every session pays for: shipped names resolve, the old brand stays inside src/legacy/,
 // and the always-loaded context stays inside its byte budget.
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { test } = require('node:test');
-const { REPO_FILES, HOME_SKILLS, COMMANDS, DESIGN_SKILLS } = require('../src/setup');
+const { HOME_SKILLS, COMMANDS, DESIGN_SKILLS } = require('../src/lib/runtime');
+const { renderRules, VARIANTS } = require('../src/lib/render-rules');
 
 const ROOT = path.resolve(__dirname, '..');
 const ASSETS = path.join(ROOT, 'assets');
 const NOMOS_BUDGET = 4500;
 const COMMON_RULES_BUDGET = 4000;
+const MIN_RULES_BUDGET = 3072;
 const LEGACY_ZONES = ['src/legacy/', 'scripts/postinstall.js', 'maintainer/'];
 const LEGACY_PACKAGE = '@tron/claude-config';
 // The tron brand and the Greek skill names that English names replaced.
@@ -59,9 +63,12 @@ test('every exo-* and techne:* name in shipped docs exists', () => {
   assert.deepStrictEqual(unknown, []);
 });
 
-test('every file setup installs is shipped', () => {
+test('every file install writes is shipped', () => {
   const missing = [
-    ...REPO_FILES.map(([src]) => path.join(ASSETS, src)),
+    path.join(ASSETS, 'machine', 'PR-TEMPLATE.md'),
+    path.join(ASSETS, 'machine', 'hooks', 'pyle.cjs'),
+    path.join(ASSETS, 'editors', 'hooks', 'cursor', 'hooks.json'),
+    path.join(ASSETS, 'editors', 'cursor', 'frontend-skills.mdc'),
     ...Object.entries(HOME_SKILLS).flatMap(([name, files]) => files.map((f) => path.join(ASSETS, 'skills', name, f))),
     ...COMMANDS.map((name) => path.join(ASSETS, 'skills', name, 'SKILL.md')),
     ...DESIGN_SKILLS.map((name) => path.join(ASSETS, 'skills', name, 'SKILL.md')),
@@ -94,4 +101,14 @@ test('always-loaded context stays inside its byte budget', () => {
   const commonDir = path.join(ASSETS, 'techne', 'rules', 'common');
   const common = fs.readdirSync(commonDir).reduce((sum, f) => sum + fs.statSync(path.join(commonDir, f)).size, 0);
   assert.ok(common <= COMMON_RULES_BUDGET, `techne rules/common is ${common} B (budget ${COMMON_RULES_BUDGET})`);
+});
+
+test('every rules variant fits inside the source and min fits the Windsurf budget', () => {
+  const source = fs.statSync(path.join(ASSETS, 'rules', 'nomos.md')).size;
+  for (const variant of VARIANTS) {
+    const size = Buffer.byteLength(renderRules(variant));
+    assert.ok(size <= source, `${variant} is ${size} B, larger than nomos.md (${source} B)`);
+  }
+  const min = Buffer.byteLength(renderRules('min'));
+  assert.ok(min <= MIN_RULES_BUDGET, `min rules are ${min} B (budget ${MIN_RULES_BUDGET})`);
 });

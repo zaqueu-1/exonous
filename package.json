@@ -1,6 +1,6 @@
 {
   "name": "exonous",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "The mind outside your head for coding agents: enforced workflow, anchored memory and a disciplined agent roster for Claude Code and Cursor.",
   "private": true,
   "repository": "github:zaqueu-1/exonous",
@@ -8,7 +8,7 @@
     "exonous": "bin/exonous.js"
   },
   "scripts": {
-    "postinstall": "node bin/exonous.js setup",
+    "postinstall": "node scripts/postinstall.js",
     "test": "node --test test/*.test.js",
     "pege:watch": "node maintainer/pege/watch.js",
     "pege:originality": "node maintainer/pege/originality.js"

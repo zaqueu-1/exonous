@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFileSync } = require('child_process');
+
+process.env.EXONOUS_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-gate-home-'));
 const {
   validateBodyContent,
   validateGhPrCreateCommand,
-} = require(path.join(__dirname, '../assets/repo/claude/hooks/lib/pr-template-validate.cjs'));
+} = require(path.join(__dirname, '../assets/machine/hooks/lib/pr-template-validate.cjs'));
 
 const VALID_BODY = `## Resumo
 Objetivo da PR.
@@ -62,6 +66,7 @@ run(['add', '.'], repo);
 commit('big');
 assert.strictEqual(ok('gh pr create --base main --body-file .claude/body.md'), false, '26+ files blocked');
 assert.strictEqual(ok('gh pr create --base missing-branch --body-file .claude/body.md'), true, 'unknown base never blocks');
+assert.strictEqual(ok('gh pr create --title "x --base missing-branch" --base main --body-file .claude/body.md'), false, 'base comes from the option, not the title');
 
 run(['checkout', '-q', 'main'], repo);
 run(['merge', '-q', '--ff-only', 'feat/x'], repo);

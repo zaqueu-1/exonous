@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');

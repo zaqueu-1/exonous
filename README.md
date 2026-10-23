@@ -4,176 +4,130 @@
 
 # Exonous
 
-**A second brain for coding agents.** Exonous gives Claude Code and Cursor the rules, workflow, memory and checks that every repository of a team should share. Hooks enforce them; nobody has to remember them.
+*Exonous*, from Greek ἔξω (*exo*, "outside") + νοῦς (*nous*, "mind"): the mind outside your head.
 
-> *Exonous*, from Greek ἔξω (*exo*, "outside") + νοῦς (*nous*, "mind"): the mind outside your head.
-
-Coding agents reason brilliantly and forget everything. Each session they re-discover the codebase, re-read whole files to use ten lines, skip the review the team agreed on, and lose the decision made last week. Exonous fixes the parts that instructions alone never fix:
-
-- **Gates you cannot skip.** Commits pass a security review and a code review; PRs follow a template and a size cap. Git hooks and Claude Code hooks enforce it, not goodwill.
-- **A workflow sized to the work.** Trivial changes stay inline; real features go plan → build → verify → review with a fixed roster of agents and compact reports.
-- **Memory that does not rot.** Decisions, plans and explanations live in your Obsidian vault, anchored to the exact lines of code they describe, with drift detection.
-- **A small, constant context bill.** One always-on rule under 4.5 KB, locate-first code navigation, and nudges away from whole-file reads.
-
----
-
-## What's inside
-
-Skills and commands have plain English names for what they do. The always-on pieces underneath (the rule, the MCP servers, the hooks and the techne plugin) keep short Greek names.
-
-| Name | Greek | What it does | How you use it |
-|---|---|---|---|
-| **nomos** | νόμος, law | The single always-on rule: priorities, terse replies, engineering discipline, verification, git gates, the agent roster | Loaded automatically in every session |
-| **deliver** | — | Delivery workflow: classify → plan → execute → verify → close | `/deliver <request>` · `/deliver plan …` · `/deliver resume <id>` · `/deliver status` |
-| **project-memory** | — | ADRs, plans and docs in your vault, anchored to code, searched offline, with drift checks | Through deliver and session-handoff, or directly: `node ~/.claude/skills/project-memory/project-memory.mjs search "…"` |
-| **commit-changes** | — | The only way to commit: leak scan, security review, code review, then a one-shot token | `/commit-changes` |
-| **make-pr** | — | The only way to open a PR: template body, ≤ 25 changed files (pure renames don't count) | `/make-pr` |
-| **code-review** | — | Code review of local changes or a PR | `/code-review [PR]` |
-| **security-review** | — | Security review: secrets, injection, auth, XSS, data exposure | `/security-review` |
-| **session-handoff** | — | Session handoff notes in the vault, and resuming from them | `/session-handoff` |
-| **doc** | — | Finds which vault docs a session made stale and updates them | `/doc` |
-| **issue-board** | — | Your open issues from GitHub Projects, ranked and grouped | `/issue-board` |
-| **atlas** | Ἄτλας, the map | Structural code graph (MCP): search symbols, trace calls, fetch exact snippets | `mcp__atlas__*` tools |
-| **biblos** | βίβλος, book | Live library and API documentation (MCP) | `mcp__biblos__*` tools |
-| **techne** | τέχνη, craft | Stack skills (Vue, React, Go, Python, …), language rules scoped to your stack, quality hooks | `techne:<stack>` skills, loaded on demand |
-| **ui-design** | — | Design direction, critique, audit and polish for any UI work | `/ui-design <command>` |
-| **ui-motion** | — | Animation and interaction feel, web and Expo | loaded with ui-design |
-| **native-ui** | — | Native platform feel: Apple HIG, SwiftUI, React Native | loaded with ui-design |
-| **ui-mockup** | — | Comps, mockups and image-to-code | loaded with ui-design |
-| **ui-patterns** | — | Charts, forms, navigation and stack guidelines, subordinate to ui-design | loaded after ui-design sets direction |
-| **taxis** | τάξις, order | Hook that allows only the 12 `exo-*` agents, remaps the rest and pins each agent's model tier | automatic |
-| **pyle** | πύλη, gate | Hook that blocks `git commit` without the commit-changes token and non-conforming `gh pr create` | automatic |
-| **metron** | μέτρον, measure | Hook that nudges whole-file reads of large files toward locate-first | automatic |
-| **kairos** | καιρός, the right moment | Session hook: workspace map, update notes, background updates | automatic |
-
-### The agents
-
-Twelve subagents, each fixed to a model tier: planning, review and research run on the economical tier; code is written on the robust one.
-
-| Agent | Role | Agent | Role |
-|---|---|---|---|
-| `exo-pm` | requirements, plans, backlog | `exo-backend` | APIs, domain logic, the default implementer |
-| `exo-cto` | architecture, ADRs, tech choices | `exo-mobile` | React Native, Swift, Kotlin, Flutter |
-| `exo-researcher` | code navigation, docs, research | `exo-data-ai` | schema, queries, pipelines, LLM features |
-| `exo-designer` | UX direction, accessibility, design review | `exo-devops` | CI/CD, releases, git hooks |
-| `exo-frontend` | web UI (Vue/Nuxt, React/Next, Tailwind) | `exo-infra` | cloud, IaC, Kubernetes, observability |
-| `exo-qa` | review, tests, verification gate | `exo-security` | AppSec, auth, secrets, dependencies |
-
-Every agent report starts with one JSON line, `{"status":"done|partial|blocked","cause":"…","risks":[…]}`, so the coordinating session reads results instead of transcripts.
-
----
+Exonous is installed once per machine and active in every project of every supported AI coding tool. It gives agents shared rules, a delivery workflow, anchored memory in your Obsidian vault, and gates on commits, risky pushes and PRs. It writes nothing into your repositories.
 
 ## Install
 
-Add Exonous as a dev dependency and install with whatever package manager the repo already uses:
-
-```jsonc
-// package.json
-{
-  "devDependencies": {
-    "exonous": "github:zaqueu-1/exonous"
-  }
-}
-```
+Needs Node 18+ and git.
 
 ```bash
-npm install        # or: pnpm install / bun install
+npm i -g github:zaqueu-1/exonous#v2.1.0     # or: pnpm add -g … / bun add -g …
+exonous install
 ```
 
-That's all. `postinstall` runs `exonous setup`:
+`exonous install` is the contract and is safe to re-run. The package's `postinstall` runs it too, but only as a best effort (pnpm and bun may skip it).
 
-- **In the repository:** `AGENTS.md`, `.claude/settings.json`, the pyle/metron/kairos hooks, the PR template, `pre-commit` and `pre-push` git hooks, and the techne rules for the stacks it detects.
-- **On developer machines:** nomos, the agents, the skills, the design stack, the techne plugin, and the atlas and biblos MCP servers. CI gets only the repository part.
-
-Setup never overwrites your `CLAUDE.md`, `.claude/commands/` or `.claude/settings.local.json`.
-
-Then point project-memory at your Obsidian vault once per machine:
+Then point project-memory at your vault once:
 
 ```bash
 echo '{ "vault": "/absolute/path/to/your/vault" }' > ~/.claude/skills/project-memory/config.json
 ```
 
-Memories live in `<vault>/<repo-name>/memory/{adr,plan,doc}/` as plain Markdown with frontmatter, readable and editable in Obsidian.
+## Supported tools
 
----
+| Tool | Gate | Rules | Commands | MCP | Update |
+|---|---|---|---|---|---|
+| Claude Code | hard | `~/.claude/rules` | commands, skills, agents | yes | `SessionStart` |
+| Cursor | hard | `nomos.mdc` | skills | yes | `sessionStart` |
+| Gemini CLI | hard | `GEMINI.md` | `.toml` commands | from Claude Code | `SessionStart` |
+| Codex CLI | hard | `AGENTS.md` | `exonous workflow` | `config.toml` | `SessionStart` |
+| OpenCode | hard | `instructions` | commands, agents | from Claude Code | `session.created` |
+| Windsurf | reduced | `global_rules.md` | `exonous workflow` | existing file | `pre_user_prompt` |
+| Copilot | reduced | via `~/.claude` | `exonous workflow` | no | `sessionStart` |
+| Cline | none | Rules dir | no | no | no |
+| Qwen Code | none | `QWEN.md` | no | no | no |
+| Kiro | none | no | no | no | no |
 
-## A day with Exonous
+- **Hard:** the tool's blocking hook is registered. **Reduced:** Windsurf writes only into config files that already exist and caps rules at 6000 chars; Copilot hooks are Preview.
+- **Rules only, not gated:** Cline, Qwen Code, Kiro (Kiro is detect-only). They can commit without a token; install and doctor say so.
+- **Unsupported:** Aider (doctor prints how to add `read:` by hand), Roo.
+- **Codex:** approve the exonous hook in `/hooks`, or the gate stays pending.
+- **Cursor:** User Rules live in its settings; paste `~/.claude/exonous/rules/nomos.md` there (after each release).
+- MCP copied to other tools carries only command and arguments or an `https` URL, never headers or env, and nothing that looks like a credential.
 
-```mermaid
-flowchart LR
-  A["/deliver request"] --> B{classify}
-  B -- trivial --> I[inline change] --> V
-  B -- standard / complex --> P[plan<br/>exo-pm · exo-cto] --> M[(project-memory plan)]
-  M --> E[implement<br/>exo-frontend · exo-backend · …] --> V[verify & review<br/>exo-qa · exo-security]
-  V -- findings --> E
-  V -- pass --> C[close<br/>ADR in project-memory · plan removed]
-  C --> S["/commit-changes"] --> G["/make-pr"]
+## How the gates work
+
+```
+exonous workflow commit → /security-review → /code-review → exonous token commit → git commit
 ```
 
-1. **Start a task:** `/deliver add rate limiting to the public API`. It looks up related decisions with project-memory, classifies the work and states the branch strategy. Trivial work is done inline. Larger work gets a plan, saved as a project-memory `plan` so it survives the session.
-2. **Build and verify:** implementers get a compact packet (goal, files, done-checks), and gate agents fetch the diff themselves. Revision rounds go back to the same agent, and the loop stops after two rounds without progress.
-3. **Close:** decisions become ADRs anchored to code, and the executed plan is removed.
-4. **Ship:** `/commit-changes` runs `/security-review` and `/code-review`, then commits. `/make-pr` opens the PR from the template.
-5. **Stop for the day:** `/session-handoff` writes a handoff note to the vault; `/session-handoff resume` picks it up tomorrow.
+- `git commit` needs a one-shot token for exactly the tree staged at that moment (15 min). Staging at commit time (`-a`, `-p`, pathspecs) is refused. Staged changes are scanned with `gitleaks` when installed.
+- `git push` is free on ordinary branches. A force-push or a push to `main`/`master` needs `exonous token push`; pushing every branch or deleting one is always refused.
+- `gh pr create` needs the PR template's section titles and at most 25 changed files (`exonous template`, `exonous validate-pr <file>`).
+- The gated command must run alone, optionally after one `cd <dir> &&`. A refusal names the next step; tools without commands get the procedure from `exonous workflow commit|pr`.
+- Commits you make in your own terminal are not gated.
 
----
+This is a speed bump for agents, not a sandbox. Not covered: scripts or build tools that run git or `gh` inside, commits from `merge`/`rebase`/`cherry-pick`, PRs opened via `curl`, the API or `gh` extensions, and an agent minting its own token.
+
+## What's inside
+
+Shared skills live in `~/.agents/skills`; the hook runtime in `~/.claude/exonous`.
+
+| Name | What it does | Use |
+|---|---|---|
+| **nomos** (νόμος) | the single always-on rule, under 4.5 KB | automatic |
+| **deliver** | classify → plan → execute → verify → close | `/deliver <request>` |
+| **project-memory** | ADRs, plans, docs in the vault, anchored to code | via deliver, or `node ~/.claude/skills/project-memory/project-memory.mjs search "…"` |
+| **commit-changes**, **make-pr** | the only way to commit and open a PR | `/commit-changes`, `/make-pr` |
+| **code-review**, **security-review** | review local changes or a PR | `/code-review`, `/security-review` |
+| **session-handoff**, **doc** | handoff notes; refresh stale vault docs | `/session-handoff`, `/doc` |
+| **issue-board** | open GitHub Project issues, ranked | `/issue-board` |
+| **ui-design**, **ui-motion**, **native-ui**, **ui-mockup**, **ui-patterns** | design direction, motion, native feel, mockups, charts/forms | `/ui-design <command>` |
+| **atlas** (Ἄτλας), **biblos** (βίβλος) | code graph and live library docs (MCP) | `mcp__atlas__*`, `mcp__biblos__*` |
+| **techne** (τέχνη) | stack skills, scoped language rules, quality hooks (Claude Code) | `techne:<stack>` |
+| **taxis** (τάξις) | allows only the 12 `exo-*` agents and pins their model tiers (Claude Code, Cursor) | automatic |
+| **pyle** (πύλη) | the commit, push and PR gate | automatic |
+| **metron** (μέτρον) | nudges large whole-file reads toward locate-first (Claude Code) | automatic |
+| **kairos** (καιρός) | shows the update note, starts the daily update | automatic |
+
+Agents (`exo-*`, each fixed to a model tier): `pm`, `cto`, `researcher`, `designer`, `frontend`, `backend`, `mobile`, `data-ai`, `devops`, `infra`, `qa`, `security`. Every report starts with `{"status":"done|partial|blocked","cause":"…","risks":[…]}`.
 
 ## Updates
 
-Updates are automatic and silent:
+- At most daily, kairos starts `exonous update` in the background at session start in any gated tool.
+- It picks the newest `vX.Y.Z` tag of the same major, resolves it to its commit, installs that commit with the package manager recorded at install, verifies it, then runs `exonous install --quiet`. Failures back off a day (`~/.claude/exonous/state/update.log`).
+- The next session shows one line. A new major is announced, never applied by itself.
+- Installs from a branch or commit are never auto-updated; `exonous doctor` warns if a release tag moved.
 
-- Once a day, kairos runs `exonous update` in the background at session start, so it never delays you.
-- It moves the dependency to the newest `vX.Y.Z` release tag, reinstalls with your package manager and re-runs setup.
-- Files a release dropped are removed from every machine, except ones you edited.
-- The next session shows one line: `exonous updated v2.0.0 → v2.1.0`.
+## Commands
 
-```bash
-npx exonous update            # update now
-npx exonous update --check    # just tell me
-```
+| Command | Purpose |
+|---|---|
+| `exonous install` | wire every detected tool. Flags: `--tools a,b` `--all` `--skip-tool a,b` `--permissions` `--rewrite-jsonc` `--dry-run` `--quiet` |
+| `exonous update [--check\|--major]` | update now, report only, or cross a major |
+| `exonous doctor` | per-tool matrix (rules, gate, commands, MCP, update) and every check with its fix |
+| `exonous gate --selftest <tool>` | pipe a fake `git commit` to the registered hook and expect a refusal |
+| `exonous uninstall [--yes\|--dry-run\|--remove-package]` | remove what install wrote; keeps `config.json` and MCP registrations |
+| `exonous migrate [--repo <dir>]` | move a repo-mode install to the machine install |
+| `exonous token <commit\|push>` | mint the one-shot token after review |
+| `exonous workflow <commit\|pr>` | print the procedure |
+| `exonous template`, `draft-path`, `validate-pr <file>` | PR template, draft location, body check |
 
-To freeze a repo, pin the dependency to a commit or branch (`github:zaqueu-1/exonous#<sha>`); pinned specs are never touched. Set `EXONOUS_NO_UPDATE=1` to skip the daily check.
+`--permissions` pre-approves only the read-only helpers (`workflow`, `template`, `draft-path`, `validate-pr`) in Claude Code. Doctor's gate self-test proves the script and wiring, not that the tool loads the hook; rows marked `⚠` are things it cannot verify.
 
-## Doctor and uninstall
+## Migrating from repo installs
 
-```bash
-npx exonous doctor      # every piece, ✓ or ✗ with the exact fix
-npx exonous uninstall   # removes what setup wrote; keeps MCP registrations and your skill config
-```
+v2.0.0 and `@tron/claude-config` installed as a devDependency and wrote files into each repo. When such a copy installs or updates, it:
 
-## Migrating from `@tron/claude-config`
+- runs the machine install and checks the gate hook is registered; if that fails, the repo is left untouched;
+- removes only the files it wrote and that you did not edit (edited ones are kept and listed), and strips only exonous entries from hook configs;
+- removes the devDependency when `package.json` and the lockfile have no other uncommitted changes, otherwise tells you to run `exonous migrate`.
 
-Nothing to do. The next daily update of a tron-era repo:
+Removed tracked files show up in `git status` for you to commit. `/tron-flow` stays an alias of `/deliver` for one release.
 
-- renames the dependency to `exonous`;
-- installs the new release;
-- replaces the old hooks;
-- moves your skill config (`config.json`, `data/`) to the renamed skills;
-- removes the old agents, skills, rules and the external workflow engine.
+## Privacy and opt-outs
 
-`/tron-flow` keeps working as an alias for `/deliver` for one release.
+No telemetry. Network use: the daily `git ls-remote` against `github.com/zaqueu-1/exonous`, the package-manager install on update, and, on first install, a checksum-verified download of the atlas engine.
 
-## Emergency bypass
+| Setting | Effect |
+|---|---|
+| `EXONOUS_NO_UPDATE=1`, `CI`, `~/.claude/exonous/config.json` `{"autoUpdate": false}` | no automatic updates |
+| `EXONOUS_NO_INSTALL=1`, `{"autoInstall": false}` | no automatic repo migration |
+| `{"disabledTools": ["cline"]}` | tools a plain `exonous install` skips |
+| `EXONOUS_HOME=<dir>` | read and write `<dir>` as the home (safe trials; skips global installs) |
 
-For humans only: `git commit --no-verify` and `git push --no-verify` skip the git hooks. Agents are blocked from doing this.
+## Maintainers
 
----
-
-## Repository layout
-
-```
-bin/exonous.js     CLI: setup · update · doctor · uninstall
-src/               installer, updater, doctor, uninstall (src/legacy/ = one-release tron bridge)
-assets/
-  rules/           nomos
-  agents/          exo-* agents, roster, taxis
-  skills/          deliver project-memory commit-changes make-pr code-review security-review session-handoff doc issue-board ui-design ui-motion native-ui ui-mockup ui-patterns
-  techne/          the techne plugin: stack skills, language rules, quality hooks
-  repo/            files installed into each repository
-  editors/         Cursor and Copilot integrations
-test/              npm test
-docs/              cover, maintainer guide
-maintainer/        upstream provenance (pege) and mirror tooling, never shipped
-```
-
-Maintainers: releases, guards and upstream tracking are in [docs/MAINTAINING.md](docs/MAINTAINING.md).
+Releases, adapters, guards and upstream tracking: [docs/MAINTAINING.md](docs/MAINTAINING.md).
