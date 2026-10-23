@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { test, beforeEach, afterEach } = require('node:test');
+const { isolatedPath } = require('./helpers/adapter-fixture');
 const { install } = require('../src/install');
 const { readLedger } = require('../src/lib/home');
 const { readInstallInfo, SOURCE, stageDir } = require('../src/lib/runtime');
@@ -16,7 +17,7 @@ let saved;
 beforeEach(() => {
   saved = { home: process.env.EXONOUS_HOME, path: process.env.PATH };
   process.env.EXONOUS_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'install-home-'));
-  process.env.PATH = path.dirname(process.execPath);
+  process.env.PATH = isolatedPath();
   fs.mkdirSync(path.join(process.env.EXONOUS_HOME, '.claude'));
 });
 afterEach(() => {
@@ -255,3 +256,38 @@ test('postinstall: CI and repo node_modules skip, global and explicit installs r
   assert.strictEqual(postinstallDecision({}, bunGlobal).action, 'install');
   assert.strictEqual(postinstallDecision({}, path.join(__dirname, '..')).action, 'skip', 'dev checkout');
 });
+
+test('a CLI install into a fixture home with every tool dir never touches os.homedir(); doctor self-tests each gate', () => {
+  const { spawnSync } = require('child_process');
+  const osHome = fs.mkdtempSync(path.join(os.tmpdir(), 'install-oshome-'));
+  for (const dir of ['.claude', '.cursor', '.gemini', '.codex', '.config/opencode']) fs.mkdirSync(home(dir), { recursive: true });
+  const env = { ...process.env, HOME: osHome, USERPROFILE: osHome, EXONOUS_HOME: process.env.EXONOUS_HOME, PATH: process.env.PATH, EXONOUS_NO_UPDATE: '1' };
+  delete env.EXONOUS_TEST;
+  const bin = path.join(__dirname, '..', 'bin', 'exonous.js');
+  const res = spawnSync(process.execPath, [bin, 'install', '--quiet'], { env, encoding: 'utf8' });
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.deepStrictEqual(fs.readdirSync(osHome), [], 'os.homedir() untouched');
+  assert.deepStrictEqual(Object.keys(readInstallInfo().tools), ['claude', 'cursor', 'gemini', 'codex', 'opencode']);
+  const doctor = spawnSync(process.execPath, [bin, 'doctor'], { env, encoding: 'utf8' }).stdout;
+  for (const id of ['claude', 'cursor', 'gemini', 'codex', 'opencode']) assert.match(doctor, new RegExp(`✓ ${id}: gate self-test`), doctor);
+  assert.match(doctor, /⚠ Codex CLI: gate approved in \/hooks \(pending/);
+  assert.match(doctor, /⚠ Cursor: User Rules/);
+  for (const label of ['Gemini CLI: gate hook', 'Codex CLI: gate hook registered', 'OpenCode: gate plugin']) assert.ok(doctor.includes(`✓ ${label}`), label);
+  assert.deepStrictEqual(fs.readdirSync(osHome), []);
+});
+
+test('doctor: warn-level rows show ⚠ with their fix and never fail the run', () => {
+  const { report } = require('../src/doctor');
+  const ok = { name: 'a', ok: true, fix: 'x' };
+  const warn = { name: 'b', ok: false, level: 'warn', status: 'pending', fix: 'approve it' };
+  const bad = { name: 'c', ok: false, fix: 'install' };
+  const onlyWarn = report([ok, warn]);
+  assert.strictEqual(onlyWarn.failed, 0);
+  assert.strictEqual(onlyWarn.warned, 1);
+  assert.match(onlyWarn.text, /⚠ b \(pending\)\n {6}fix: approve it/);
+  assert.match(onlyWarn.text, /All good \(1 warning\)\./);
+  const withBad = report([ok, warn, bad]);
+  assert.strictEqual(withBad.failed, 1);
+  assert.match(withBad.text, /✗ c\n {6}fix: install/);
+});
+

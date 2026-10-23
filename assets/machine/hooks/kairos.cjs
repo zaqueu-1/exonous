@@ -9,6 +9,13 @@ function arg(name) {
   return i === -1 ? null : process.argv[i + 1] || null;
 }
 
+// Tools that fire kairos where stdout reaches nobody (every prompt, a detached plugin spawn) only trigger the check.
+const SILENT = ['windsurf', 'opencode'];
+const FORMATS = {
+  cursor: (note) => JSON.stringify({ additional_context: note }),
+  gemini: (note) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: note } }),
+};
+
 function startUpdate(selfupdate, adapter) {
   if (selfupdate.optedOut() || !selfupdate.due()) return;
   selfupdate.markChecked();
@@ -22,10 +29,9 @@ function main() {
     selfupdate.run({ background: true });
     return;
   }
-  // Windsurf fires on every prompt: a stat of last-check, nothing printed.
-  if (adapter !== 'windsurf') {
+  if (!SILENT.includes(adapter)) {
     const note = selfupdate.takeNote();
-    if (note) process.stdout.write(`${adapter === 'cursor' ? JSON.stringify({ additional_context: note }) : note}\n`);
+    if (note) process.stdout.write(`${FORMATS[adapter] ? FORMATS[adapter](note) : note}\n`);
   }
   startUpdate(selfupdate, adapter);
 }

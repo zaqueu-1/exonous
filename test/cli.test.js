@@ -109,7 +109,7 @@ test('gate --selftest runs the registered hook and expects a deny', () => {
   assert.strictEqual(cli(['install']).status, 0);
   const ok = cli(['gate', '--selftest', 'claude']);
   assert.strictEqual(ok.status, 0, ok.stdout + ok.stderr);
-  assert.match(ok.stdout, /claude: gate denies/);
+  assert.match(ok.stdout, /claude: script self-test \(does not prove the tool loads the hook\): gate denies/);
   fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
   assert.strictEqual(cli(['install']).status, 0);
   assert.strictEqual(cli(['gate', '--selftest', 'cursor']).status, 0);

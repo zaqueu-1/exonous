@@ -8,8 +8,11 @@ const { spawnSync } = require('child_process');
 const paths = require('../lib/paths');
 const claude = require('./claude');
 const cursor = require('./cursor');
+const gemini = require('./gemini');
+const codex = require('./codex');
+const opencode = require('./opencode');
 
-const ADAPTERS = [claude, cursor];
+const ADAPTERS = [claude, cursor, gemini, codex, opencode];
 
 function readConfig() {
   try {
@@ -40,6 +43,8 @@ function select({ tools = null, all = false, skip = [] } = {}) {
   return { selected, detected };
 }
 
+const SCRIPT_ONLY = 'script self-test (does not prove the tool loads the hook)';
+
 /** First quoted word of a registered hook command: the node binary captured at install. */
 function commandNode(command) {
   const m = /^"((?:[^"\\]|\\.)*)"/.exec(command || '');
@@ -51,6 +56,7 @@ function commandNode(command) {
  * @returns {{ ok: boolean, detail: string }}
  */
 function selftest(adapter) {
+  if (adapter.selftest) return adapter.selftest();
   const command = adapter.registeredCommand();
   if (!command) return { ok: false, detail: 'gate hook not registered' };
   const node = commandNode(command);
@@ -60,8 +66,8 @@ function selftest(adapter) {
   const res = spawnSync(shell[0], shell[1], { input, encoding: 'utf8', timeout: 30000, windowsVerbatimArguments: true });
   const denied = res.status === 2 || /"permission(Decision)?":"deny"/.test(res.stdout || '');
   return denied
-    ? { ok: true, detail: 'gate denies an unreviewed git commit' }
-    : { ok: false, detail: `gate did not deny (exit ${res.status}${res.error ? `, ${res.error.message}` : ''})` };
+    ? { ok: true, detail: `${SCRIPT_ONLY}: gate denies an unreviewed git commit` }
+    : { ok: false, detail: `${SCRIPT_ONLY}: gate did not deny (exit ${res.status}${res.error ? `, ${res.error.message}` : ''})` };
 }
 
-module.exports = { ADAPTERS, select, detectAll, readConfig, selftest, commandNode };
+module.exports = { ADAPTERS, select, detectAll, readConfig, selftest, commandNode, SCRIPT_ONLY };

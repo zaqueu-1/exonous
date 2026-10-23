@@ -62,7 +62,8 @@ function upsert(text, content, styleName = 'html') {
   let next;
   if (span) next = text.slice(0, span.start) + block + text.slice(span.end);
   else if (!text) next = `${block}${eol}`;
-  else next = `${text}${text.endsWith('\n') ? '' : eol}${eol}${block}${eol}`;
+  // A file without a final newline gets none after the block either, so remove can tell the two apart.
+  else next = text.endsWith('\n') ? `${text}${eol}${block}${eol}` : `${text}${eol}${eol}${block}`;
   return { status: next === text ? 'unchanged' : 'written', text: next };
 }
 
@@ -75,9 +76,10 @@ function remove(text, styleName = 'html') {
   let before = text.slice(0, span.start);
   let after = text.slice(span.end);
   const eol = eolOf(text);
+  const atEof = after === '';
   after = after.replace(/^\r?\n/, '');
-  // Undo the blank separator upsert adds before an appended block.
-  if (!after && before.endsWith(eol + eol)) before = before.slice(0, -eol.length);
+  // Undo the separator upsert adds before an appended block: one blank line, plus the newline it added when there was none.
+  if (!after && before.endsWith(eol + eol)) before = before.slice(0, atEof ? -2 * eol.length : -eol.length);
   return { status: 'removed', text: before + after, body };
 }
 

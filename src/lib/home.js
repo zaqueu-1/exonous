@@ -164,11 +164,12 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
     return true;
   }
 
-  function section(destAbs, content, { style = 'html', tool } = {}) {
+  /** @param {{ style?: string, tool?: string, writer?: (file: string) => { status: string, hash?: string } }} [options] writer replaces the plain marker upsert (e.g. TOML tables). */
+  function section(destAbs, content, { style = 'html', tool, writer } = {}) {
     const rel = homeRel(destAbs);
     let res;
     try {
-      res = markers.upsertFile(destAbs, content, { style, dryRun, log });
+      res = writer ? writer(destAbs) : markers.upsertFile(destAbs, content, { style, dryRun, log });
     } catch (err) {
       ledger.complete = false;
       log(`WARN: ~/${rel} section not synced: ${err.message}`);
@@ -176,7 +177,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
     }
     const entry = { path: rel, marker: style, hash: res.hash, ...(tool ? { tool } : {}) };
     if (res.status !== 'malformed') {
-      ledger.currentSections.push(entry);
+      if (res.hash) ledger.currentSections.push(entry);
       return;
     }
     // Unmanageable now, but still ours: keep the old entry so prune does not retire it.

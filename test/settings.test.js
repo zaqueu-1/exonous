@@ -180,3 +180,23 @@ test('writes keep the file mode, follow a symlinked settings file, and back up w
   assert.strictEqual(fs.statSync(real).mode & 0o777, 0o600);
   assert.deepStrictEqual(fs.readdirSync(fx.dir).filter((f) => f.includes('.tmp')), []);
 });
+
+test('stripJsonc drops comments and trailing commas outside strings only', () => {
+  const { stripJsonc } = require('../src/lib/settings');
+  const text = '{\n  // line\n  "url": "http://x//y", /* block */ "s": "a /* not */ b",\n  "list": [1, 2,],\n}\n';
+  assert.deepStrictEqual(JSON.parse(stripJsonc(text)), { url: 'http://x//y', s: 'a /* not */ b', list: [1, 2] });
+});
+
+test('jsonc: true rewrites a commented file as JSON after a dedicated backup; default leaves it alone', () => {
+  const raw = '{\n  // mine\n  "theme": "dark",\n}\n';
+  const fx = fixture('settings.json', {});
+  fs.writeFileSync(fx.file, raw);
+  assert.strictEqual(mergeOwned(fx.file, { format: 'gemini', entries: claudeEntries(), ownedMarker: OWNED, log: (m) => fx.logs.push(m) }).status, 'invalid');
+  assert.strictEqual(fs.readFileSync(fx.file, 'utf8'), raw);
+  const res = mergeOwned(fx.file, { format: 'gemini', entries: claudeEntries(), ownedMarker: OWNED, jsonc: true, log: (m) => fx.logs.push(m) });
+  assert.strictEqual(res.status, 'written');
+  assert.strictEqual(fx.read().theme, 'dark');
+  assert.strictEqual(fs.readFileSync(`${fx.file}.exonous-jsonc.bak`, 'utf8'), raw);
+  assert.ok(fx.logs.some((m) => /WARN: .*comments .*removed/.test(m)));
+});
+

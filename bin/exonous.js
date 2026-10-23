@@ -8,8 +8,8 @@ const USAGE = `exonous — the mind outside your head, for coding agents
 
 Usage: exonous <command> [flags]
 
-  install       wire every detected tool (Claude Code, Cursor) machine-wide; safe to re-run
-                --dry-run  --quiet  --permissions  --tools a,b  --all  --skip-tool x
+  install       wire every detected tool (Claude Code, Cursor, Gemini, Codex, OpenCode); safe to re-run
+                --dry-run  --quiet  --permissions  --tools a,b  --all  --skip-tool x  --rewrite-jsonc
   update        move to the latest release of this major   --check: report only  --major: cross a major
   doctor        check every piece and say how to fix what is missing
   uninstall     remove exonous from this machine            --yes  --dry-run
@@ -46,7 +46,7 @@ function runInstall() {
   }
   require('../src/install').install({
     dryRun: flag('dry-run'), quiet: flag('quiet'), permissions: flag('permissions'), tools: list('tools'), all: flag('all'),
-    skip: list('skip-tool') || [], realHome: flag('real-home'),
+    skip: list('skip-tool') || [], realHome: flag('real-home'), rewriteJsonc: flag('rewrite-jsonc'),
   });
   return 0;
 }

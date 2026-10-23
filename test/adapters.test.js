@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { test, beforeEach, afterEach } = require('node:test');
+const { isolatedPath } = require('./helpers/adapter-fixture');
 const { select, ADAPTERS } = require('../src/adapters');
 const { install } = require('../src/install');
 const { stripOwned } = require('../src/lib/settings');
@@ -17,7 +18,7 @@ let saved;
 beforeEach(() => {
   saved = { home: process.env.EXONOUS_HOME, path: process.env.PATH };
   process.env.EXONOUS_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'adapters-home-'));
-  process.env.PATH = path.dirname(process.execPath);
+  process.env.PATH = isolatedPath();
 });
 afterEach(() => {
   for (const [key, value] of [['EXONOUS_HOME', saved.home], ['PATH', saved.path]]) {
@@ -56,9 +57,9 @@ test('selection: detected tools by default, flags narrow or widen, unknown names
   assert.deepStrictEqual(select({}).selected.map((a) => a.id), ['cursor']);
   assert.deepStrictEqual(select({ tools: ['claude'] }).selected.map((a) => a.id), ['claude']);
   fs.rmSync(home('.cursor'), { recursive: true });
-  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['cursor'], '--all ignores detection, not disabledTools');
+  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['cursor', 'gemini', 'codex', 'opencode'], '--all ignores detection, not disabledTools');
   fs.rmSync(home('.claude', 'exonous', 'config.json'));
-  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['claude', 'cursor']);
+  assert.deepStrictEqual(select({ all: true }).selected.map((a) => a.id), ['claude', 'cursor', 'gemini', 'codex', 'opencode']);
   assert.throws(() => select({ tools: ['vim'] }), /unknown tool: vim/);
 });
 

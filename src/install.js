@@ -35,19 +35,30 @@ function installDesignStack(home, { dryRun, log }) {
   log(`design stack ${dryRun ? 'would be ' : ''}synced → ~/.agents/skills (${DESIGN_SKILLS.join(', ')})`);
 }
 
+/** A hard-gate tool whose gate could not be registered is named at the end of the run, never just buried in a WARN. */
+function gateProblems(adapter, { dryRun, warnings, problems }) {
+  const out = problems.map((p) => ({ tool: adapter.id, ...p }));
+  if (dryRun || adapter.gate !== 'hard' || adapter.registeredCommand()) return out;
+  const reason = (warnings[0] || 'the hook could not be registered').replace(/ — [^—]*not written; file left untouched$/, '');
+  const fix = /not valid JSON/.test(reason) && ['gemini', 'opencode'].includes(adapter.id)
+    ? 'fix the JSON by hand, or rerun `exonous install --rewrite-jsonc` (drops comments; backup kept)'
+    : 'fix the file named above, then rerun `exonous install`';
+  return [{ tool: adapter.id, what: 'gate', reason, fix }, ...out];
+}
+
 /**
  * @param {{ dryRun?: boolean, quiet?: boolean, permissions?: boolean, tools?: string[] | null, all?: boolean, skip?: string[],
  *   external?: boolean, execPath?: string, log?: (msg: string) => void }} [options]
  * @returns {{ tools: string[] }}
  */
 function install({
-  dryRun = false, quiet = false, permissions = false, tools = null, all = false, skip = [],
+  dryRun = false, quiet = false, permissions = false, tools = null, all = false, skip = [], rewriteJsonc = false,
   external = !isolatedHome(), execPath = process.execPath, realHome = false, log,
 } = {}) {
-  const emit = log || (quiet ? (msg) => { if (/^(WARN|target home)/.test(msg)) defaultLog(msg); } : defaultLog);
+  const emit = log || (quiet ? (msg) => { if (/^(WARN|⚠|target home)/.test(msg)) defaultLog(msg); } : defaultLog);
   guardTarget({ action: 'install', dryRun, realHome, log: emit });
   const { selected, detected } = select({ tools, all, skip });
-  if (!selected.length) emit('WARN: no supported tool found (Claude Code, Cursor) — only shared pieces installed; rerun after installing one');
+  if (!selected.length) emit('WARN: no supported tool found (Claude Code, Cursor, Gemini CLI, Codex CLI, OpenCode) — only shared pieces installed; rerun after installing one');
   const home = createHome({ dryRun, log: emit, previous: legacy.previousLedger() });
   step(emit, 'legacy cleanup', () => legacy.migrateHome({ dryRun, log: emit, home }));
   step(emit, 'atlas', () => {
@@ -57,14 +68,23 @@ function install({
   step(emit, 'biblos', () => ensureBiblos({ dryRun }));
   step(emit, 'design stack', () => installDesignStack(home, { dryRun, log: emit }));
   if (!step(emit, 'runtime', () => installRuntime(home, { dryRun }))) home.ledger.complete = false;
-  const ctx = { home, dryRun, log: emit, execPath, permissions, external, detected };
+  const inactive = [];
   for (const adapter of selected) {
-    if (!step(emit, adapter.id, () => adapter.install(ctx))) home.ledger.complete = false;
+    const warnings = [];
+    const log = (msg) => {
+      if (/^WARN: /.test(msg)) warnings.push(msg.slice(6));
+      emit(msg);
+    };
+    const ctx = { home, dryRun, log, execPath, permissions, external, detected, rewriteJsonc };
+    let result = null;
+    if (!step(log, adapter.id, () => { result = adapter.install(ctx); })) home.ledger.complete = false;
+    inactive.push(...gateProblems(adapter, { dryRun, warnings, problems: (result && result.problems) || [] }));
   }
   writeInstallInfo({ tools: Object.fromEntries(selected.map((a) => [a.id, a])), dryRun });
   home.prune(packageVersion(), { tools: selected.map((a) => a.id) });
+  for (const p of inactive) emit(`⚠ ${p.tool}: ${p.what} NOT active — ${p.reason}; fix: ${p.fix}`);
   emit(`install ${dryRun ? 'dry run ' : ''}done (v${packageVersion()}) — ${selected.map((a) => a.id).join(', ') || 'no tools'}`);
-  return { tools: selected.map((a) => a.id) };
+  return { tools: selected.map((a) => a.id), inactive };
 }
 
 module.exports = { install, isolatedHome };

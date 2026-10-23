@@ -56,6 +56,16 @@ test('Cursor gets the note as additional_context JSON', { skip }, () => {
   assert.strictEqual(res.stdout.split('\n').filter(Boolean).length, 1);
 });
 
+test('Gemini gets the note as SessionStart additionalContext; OpenCode stays silent and keeps it', { skip }, () => {
+  const fx = fixture();
+  fx.put('last-check', '');
+  fx.put('note', 'exonous updated v2.1.0 → v2.2.0 (restart to load new hooks)\n');
+  assert.strictEqual(kairos(fx, ['--adapter', 'opencode']).stdout, '');
+  assert.notStrictEqual(fx.note(), '');
+  const out = JSON.parse(kairos(fx, ['--adapter', 'gemini']).stdout);
+  assert.deepStrictEqual(out, { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'exonous updated v2.1.0 → v2.2.0 (restart to load new hooks)' } });
+});
+
 test('a due check is claimed before the detached update runs; the next tool within 24 h does not start another', { skip }, async () => {
   const fx = fixture();
   const started = Date.now();

@@ -46,6 +46,17 @@ test('remove after upsert restores the original bytes', () => {
   assert.strictEqual(markers.removeFile(fx.file).status, 'absent');
 });
 
+test('upsert then remove is byte-identical with or without a trailing newline, LF and CRLF', () => {
+  for (const original of ['a', 'a\n', 'a\nb', 'a\r\nb', 'a\r\nb\r\n', 'a\n\n', 'x\r\n\r\n']) {
+    for (const style of ['html', 'hash']) {
+      const added = markers.upsert(original, 'body', style);
+      assert.strictEqual(added.status, 'written');
+      assert.strictEqual(markers.upsert(added.text, 'body', style).status, 'unchanged');
+      assert.strictEqual(markers.remove(added.text, style).text, original, `${JSON.stringify(original)} ${style}`);
+    }
+  }
+});
+
 test('remove keeps text after the section byte-identical', () => {
   const fx = fixture('AGENTS.md', 'a\n<!-- exonous:start v2 -->\nx\n<!-- exonous:end -->\nb\n');
   markers.removeFile(fx.file);

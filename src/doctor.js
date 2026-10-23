@@ -67,13 +67,24 @@ function doctor() {
   });
   const checks = [...sharedChecks(), ...updateChecks(), ...tools.flatMap((a) => a.doctor({})), ...gates];
   console.log(`exonous v${packageVersion()} — ${tools.map((a) => a.id).join(', ') || 'no supported tool detected'}\n`);
-  for (const check of checks) {
-    const detail = check.status ? ` (${check.status})` : '';
-    console.log(`  ${check.ok ? '✓' : '✗'} ${check.name}${detail}${check.ok ? '' : `\n      fix: ${check.fix}`}`);
-  }
-  const failed = checks.filter((c) => !c.ok).length;
-  console.log(failed ? `\n${failed} problem(s).` : '\nAll good.');
+  const { text, failed } = report(checks);
+  console.log(text);
   return failed ? 1 : 0;
 }
 
-module.exports = { doctor };
+/** Rows exonous cannot verify carry level 'warn': shown with ⚠ and their fix, never counted as failures. */
+function report(checks) {
+  const lines = checks.map((check) => {
+    const warn = !check.ok && check.level === 'warn';
+    const mark = check.ok ? '✓' : warn ? '⚠' : '✗';
+    const detail = check.status ? ` (${check.status})` : '';
+    return `  ${mark} ${check.name}${detail}${check.ok ? '' : `\n      fix: ${check.fix}`}`;
+  });
+  const failed = checks.filter((c) => !c.ok && c.level !== 'warn').length;
+  const warned = checks.filter((c) => !c.ok && c.level === 'warn').length;
+  const tail = warned ? ` (${warned} warning${warned === 1 ? '' : 's'})` : '';
+  lines.push(failed ? `\n${failed} problem(s)${tail}.` : `\nAll good${tail}.`);
+  return { text: lines.join('\n'), failed, warned };
+}
+
+module.exports = { doctor, report };

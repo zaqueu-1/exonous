@@ -84,7 +84,7 @@ function doctor() {
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter cursor')),
     row('nomos.mdc rule', fs.existsSync(path.join(paths.cursorDir(), 'rules', 'nomos.mdc'))),
     row('skills', COMMANDS.every((c) => fs.existsSync(path.join(paths.cursorDir(), 'skills', c, 'SKILL.md')))),
-    { name: 'Cursor: User Rules', ok: true, status: USER_RULES, fix: USER_RULES },
+    { name: 'Cursor: User Rules', ok: false, level: 'warn', status: 'cannot verify — Cursor keeps User Rules in its own settings', fix: USER_RULES },
   ];
 }
 
