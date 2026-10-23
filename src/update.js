@@ -126,8 +126,9 @@ function update({ root = process.cwd(), check = false } = {}) {
   return withLock(root, () => {
     const pm = detectPm(root);
     const cmds = PM_COMMANDS[pm];
-    if (dep.name !== NAME) run(pm, [...cmds.remove, dep.name], root);
+    // Add before removing the legacy name: a failed add must leave the old install working.
     run(pm, [...cmds.add, `${NAME}@${target}`], root);
+    if (dep.name !== NAME) run(pm, [...cmds.remove, dep.name], root);
     // npm keeps a package installed under a key that left package.json; it would shadow the real one in kairos.
     for (const legacy of LEGACY_NAMES) {
       const dir = path.join(root, 'node_modules', legacy);

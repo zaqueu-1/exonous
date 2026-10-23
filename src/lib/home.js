@@ -41,6 +41,12 @@ function createHome({ dryRun = false, log, previous }) {
       return;
     }
     try {
+      const onDisk = fs.existsSync(destAbs) ? sha256(fs.readFileSync(destAbs)) : null;
+      // A file that matches neither this release nor the last one we wrote holds the user's edits.
+      if (onDisk && onDisk !== hash && onDisk !== ledger.previous[rel]) {
+        fs.copyFileSync(destAbs, `${destAbs}.bak`);
+        log(`kept your edits to ~/${rel} as ~/${rel}.bak`);
+      }
       fs.mkdirSync(path.dirname(destAbs), { recursive: true });
       fs.writeFileSync(destAbs, content);
     } catch (err) {
@@ -50,7 +56,15 @@ function createHome({ dryRun = false, log, previous }) {
   }
 
   function sync(srcAbs, destAbs) {
-    write(destAbs, fs.readFileSync(srcAbs));
+    let content;
+    try {
+      content = fs.readFileSync(srcAbs);
+    } catch (err) {
+      ledger.complete = false;
+      log(`WARN: ~/${homeRel(destAbs)} not synced: ${err.message}`);
+      return;
+    }
+    write(destAbs, content);
   }
 
   function copyTree(srcAbs, destAbs, { exclude = ['__pycache__', '.DS_Store'] } = {}) {

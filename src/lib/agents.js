@@ -56,13 +56,13 @@ function registerCursorHooks(hooksPath, command) {
   writeJson(hooksPath, config);
 }
 
-function installAgents({ dryRun = false, log = () => {} } = {}) {
+function installAgents({ dryRun = false, log = () => {}, hasCursor } = {}) {
   const home = os.homedir();
   const stateDir = path.join(home, '.claude', 'exonous');
   const guardPath = path.join(stateDir, GUARD);
   const agentFiles = fs.readdirSync(SRC).filter((f) => /^exo-.+\.md$/.test(f));
   const cursorDir = path.join(home, '.cursor');
-  const hasCursor = fs.existsSync(cursorDir);
+  if (hasCursor === undefined) hasCursor = fs.existsSync(cursorDir);
 
   if (dryRun) {
     log(`DRY: would install ${agentFiles.length} agents and taxis → ~/.claude/exonous/`);

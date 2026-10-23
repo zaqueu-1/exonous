@@ -159,7 +159,7 @@ function setupRepo(ctx, ci) {
 
 // ── Machine ──────────────────────────────────────────────────────────────────
 
-function installHomeFiles(home, log) {
+function installHomeFiles(home, { log, hasCursor }) {
   home.sync(path.join(ASSETS, 'rules', 'nomos.md'), path.join(HOME, '.claude', 'rules', 'nomos.md'));
   for (const name of COMMANDS) {
     home.sync(path.join(ASSETS, 'skills', name, 'SKILL.md'), path.join(HOME, '.claude', 'commands', `${name}.md`));
@@ -173,18 +173,21 @@ function installHomeFiles(home, log) {
     }
     for (const file of files) home.sync(path.join(ASSETS, 'skills', name, file), path.join(dir, file));
   }
-  home.sync(path.join(ASSETS, 'editors', 'cursor', 'frontend-skills.mdc'), path.join(HOME, '.cursor', 'rules', 'frontend-skills.mdc'));
+  if (hasCursor) {
+    home.sync(path.join(ASSETS, 'editors', 'cursor', 'frontend-skills.mdc'), path.join(HOME, '.cursor', 'rules', 'frontend-skills.mdc'));
+  }
 }
 
 // Design skills ship an engine tree, so they are replaced whole instead of tracked file by file.
-function installDesignStack(home, { dryRun, log }) {
+function installDesignStack(home, { dryRun, log, hasCursor }) {
+  const editors = hasCursor ? ['.claude', '.cursor'] : ['.claude'];
   for (const name of DESIGN_SKILLS) {
     const dest = path.join(HOME, '.agents', 'skills', name);
     if (!dryRun) fs.rmSync(dest, { recursive: true, force: true });
     home.copyTree(path.join(ASSETS, 'skills', name), dest);
-    for (const base of ['.claude', '.cursor', '.github']) home.link(dest, path.join(HOME, base, 'skills', name));
+    for (const base of [...editors, '.github']) home.link(dest, path.join(HOME, base, 'skills', name));
   }
-  for (const base of ['.claude', '.cursor']) {
+  for (const base of editors) {
     const dest = path.join(HOME, base, 'skills', 'ui-patterns');
     if (!dryRun) fs.rmSync(dest, { recursive: true, force: true });
     home.copyTree(path.join(ASSETS, 'skills', 'ui-patterns'), dest);
@@ -193,16 +196,25 @@ function installDesignStack(home, { dryRun, log }) {
 }
 
 function setupMachine({ dryRun, log }) {
+  // Read before any write: later steps create ~/.cursor paths and would fake a Cursor install.
+  const hasCursor = fs.existsSync(path.join(HOME, '.cursor'));
   const home = createHome({ dryRun, log, previous: legacy.previousLedger() });
   step(log, 'legacy cleanup', () => legacy.migrateHome({ dryRun, log, home }));
   step(log, 'atlas', () => {
     if (!ensureAtlas({ dryRun }).ok) log('WARN: atlas not installed — run `exonous doctor` for the manual command');
   });
   step(log, 'biblos', () => ensureBiblos({ dryRun }));
-  installHomeFiles(home, log);
-  step(log, 'design stack', () => installDesignStack(home, { dryRun, log }));
+  step(log, 'home files', () => {
+    try {
+      installHomeFiles(home, { log, hasCursor });
+    } catch (err) {
+      home.ledger.complete = false;
+      throw err;
+    }
+  });
+  step(log, 'design stack', () => installDesignStack(home, { dryRun, log, hasCursor }));
   step(log, 'techne', () => installTechne({ dryRun, log }));
-  step(log, 'agents', () => installAgents({ dryRun, log }));
+  step(log, 'agents', () => installAgents({ dryRun, log, hasCursor }));
   home.prune(packageVersion());
 }
 
