@@ -7,7 +7,7 @@ Commit the current changes with semantic commits, scan for leaks, do a quick rev
 
 ## Gates
 
-exonous gates `git commit`, `git push` and `gh pr create` in Claude Code and Cursor, machine-wide:
+exonous gates `git commit`, `git push` and `gh pr create` in every gated AI tool (`exonous doctor` lists them), machine-wide:
 
 ```
 /commit-changes → /security-review → /code-review → exonous token commit → git commit   (token: one commit of the staged tree, 15 min)
