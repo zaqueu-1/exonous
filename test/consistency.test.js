@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 // Guards what every session pays for: shipped names resolve, the old brand stays inside src/legacy/,
 // and the always-loaded context stays inside its byte budget.
 const assert = require('assert');

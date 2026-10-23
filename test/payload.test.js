@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const { test } = require('node:test');
 const payload = require('../assets/machine/hooks/lib/payload.cjs');

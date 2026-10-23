@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
