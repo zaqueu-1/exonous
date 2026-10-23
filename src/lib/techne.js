@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const paths = require('./paths');
+const { findOnPath } = require('./runtime');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 const KIT_SRC = path.join(PACKAGE_ROOT, 'assets', 'techne');
@@ -25,8 +26,30 @@ function packageVersion() {
   return JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')).version;
 }
 
+function cmdQuote(arg) {
+  if (/["%!\r\n]/.test(arg)) throw new Error(`refusing to pass ${JSON.stringify(arg)} through cmd.exe`);
+  // CommandLineToArgvW: backslashes right before the closing quote must be doubled or they escape it.
+  return /^[\w@.:\\/=-]+$/.test(arg) ? arg : `"${arg.replace(/(\\+)$/, '$1$1')}"`;
+}
+
+// npm on Windows ships claude.cmd, which Node only spawns through cmd.exe.
+function claudeInvocation(args, { platform = process.platform, which = (name) => findOnPath(name) } = {}) {
+  if (platform !== 'win32') return { file: 'claude', args, shell: false };
+  const file = which('claude');
+  if (!file) return null;
+  if (!/\.(cmd|bat)$/i.test(file)) return { file, args, shell: false };
+  return { file: [file, ...args].map(cmdQuote).join(' '), args: [], shell: true };
+}
+
 function runClaude(args, timeout = 120000) {
-  const res = spawnSync('claude', args, { encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'] });
+  let call;
+  try {
+    call = claudeInvocation(args);
+  } catch (err) {
+    return { ok: false, missing: false, output: err.message };
+  }
+  if (!call) return { ok: false, missing: true, output: 'claude not found on PATH' };
+  const res = spawnSync(call.file, call.args, { encoding: 'utf8', timeout, shell: call.shell, stdio: ['ignore', 'pipe', 'pipe'] });
   if (res.error) {
     return { ok: false, missing: res.error.code === 'ENOENT', output: res.error.message };
   }
@@ -317,6 +340,7 @@ module.exports = {
   installTechne,
   removePlugins,
   disablePlugin,
+  claudeInvocation,
   PLUGIN_ID,
   MARKETPLACE,
 };

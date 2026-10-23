@@ -146,3 +146,33 @@ test('removing the techne plugin from settings.json leaves no empty containers i
     }
   }
 });
+
+test('on Windows claude.cmd runs through cmd.exe with quoted args; claude.exe runs directly', () => {
+  const { claudeInvocation } = require('../src/lib/techne');
+  const which = (file) => () => file;
+  const args = ['plugin', 'marketplace', 'add', 'C:\\Users\\Jo Doe\\.claude\\techne', '--scope', 'user'];
+  assert.deepStrictEqual(claudeInvocation(args, { platform: 'darwin' }), { file: 'claude', args, shell: false });
+  assert.deepStrictEqual(claudeInvocation(args, { platform: 'win32', which: which('C:\\npm\\claude.cmd') }), {
+    file: 'C:\\npm\\claude.cmd plugin marketplace add "C:\\Users\\Jo Doe\\.claude\\techne" --scope user',
+    args: [],
+    shell: true,
+  });
+  assert.deepStrictEqual(claudeInvocation(args, { platform: 'win32', which: which('C:\\bin\\claude.exe') }), { file: 'C:\\bin\\claude.exe', args, shell: false });
+  assert.strictEqual(claudeInvocation(args, { platform: 'win32', which: which(null) }), null);
+  assert.strictEqual(
+    claudeInvocation(['C:\\Jo Doe\\', 'C:\\a b\\\\', 'C:\\plain\\'], { platform: 'win32', which: which('C:\\npm\\claude.cmd') }).file,
+    'C:\\npm\\claude.cmd "C:\\Jo Doe\\\\" "C:\\a b\\\\\\\\" C:\\plain\\',
+  );
+  for (const bad of ['a"b', '%PATH%', 'x!y', 'a\nb']) {
+    assert.throws(() => claudeInvocation([bad], { platform: 'win32', which: which('C:\\npm\\claude.CMD') }), /cmd\.exe/);
+  }
+});
+
+test('gh aliases are read from %APPDATA%\\GitHub CLI on Windows, like gh itself', () => {
+  const { ghConfigDir } = require('../assets/machine/hooks/lib/shell.cjs');
+  const appdata = 'C:\\Users\\u\\AppData\\Roaming';
+  assert.strictEqual(ghConfigDir({ APPDATA: appdata, HOME: '/h' }, 'win32'), 'C:\\Users\\u\\AppData\\Roaming\\GitHub CLI');
+  assert.strictEqual(ghConfigDir({ APPDATA: appdata, HOME: '/h' }, 'linux'), path.join('/h', '.config', 'gh'));
+  assert.strictEqual(ghConfigDir({ APPDATA: appdata, XDG_CONFIG_HOME: '/x' }, 'win32'), path.join('/x', 'gh'));
+  assert.strictEqual(ghConfigDir({ APPDATA: appdata, GH_CONFIG_DIR: '/g' }, 'win32'), '/g');
+});

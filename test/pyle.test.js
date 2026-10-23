@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 const { test } = require('node:test');
-const { analyze } = require('../assets/machine/hooks/lib/shell.cjs');
+const { analyze, redirectionProblem } = require('../assets/machine/hooks/lib/shell.cjs');
 const token = require('../assets/machine/hooks/lib/token.cjs');
 const { repoKey } = require('../assets/machine/hooks/lib/paths.cjs');
 
@@ -366,6 +366,25 @@ test('gh pr create must run alone and with known options', () => {
   assert.strictEqual(run('pr', claude('gh pr create --body-file body.md --frob', dir), env).code, 2);
   assert.strictEqual(run('pr', claude('gh pr create --body-file body.md extra', dir), env).code, 2);
   assert.strictEqual(run('pr', claude('cd . && gh pr create -F body.md', dir), env).code, 0);
+});
+
+test('gh pr create denies an inline gh config dir, plain or through env', () => {
+  const { dir, env } = setup();
+  fs.mkdirSync(path.join(dir, '.github'));
+  fs.writeFileSync(path.join(dir, '.github', 'pull_request_template.md'), '## Summary\n## Test plan\n');
+  fs.writeFileSync(path.join(dir, 'body.md'), '## Summary\nx\n## Test plan\ny\n');
+  const failures = [];
+  for (const name of ['GH_CONFIG_DIR', 'XDG_CONFIG_HOME', 'HOME', 'APPDATA', 'USERPROFILE']) {
+    const plain = run('pr', claude(`${name}=/tmp/x gh pr create -F body.md`, dir), env);
+    if (plain.code !== 2 || !plain.stderr.includes(`${name} points gh at a config`)) failures.push(`${name}= → ${plain.code}`);
+    const wrapped = `env ${name}=/tmp/x gh pr create -F body.md`;
+    if (run('pr', claude(wrapped, dir), env).code !== 2) failures.push(`${wrapped} allowed`);
+    const [call] = analyze(wrapped, dir).calls;
+    if (!/points gh at a config/.test(redirectionProblem(call) || '')) failures.push(`${wrapped} not a redirection`);
+  }
+  assert.deepStrictEqual(failures, []);
+  assert.strictEqual(run('pr', claude('FOO=1 gh pr create -F body.md', dir), env).code, 0);
+  assert.strictEqual(run('pr', claude('FOO=1 gh pr list', dir), env).code, 0);
 });
 
 test('ignored dirs and nested ignored files never count as gitleaks config drift', () => {
