@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# mirror-sync.sh — mirror canonical repo → quanthubbr/tron-claude-config (push)
+# mirror-sync.sh — push the canonical repo to the quanthub org mirror (FORK_URL below).
 #
-# quanthubbr/tron-claude-config is an org mirror, NOT a GitHub fork — no upstream PR UI.
-# Prefer automatic pull on the mirror: .github/workflows/sync-from-upstream.yml
-# (runs only on quanthubbr/tron-claude-config).
+# The mirror is not a GitHub fork; prefer its automatic pull (.github/workflows/sync-from-upstream.yml).
 #
 # This push script is for maintainers who have git push access to the mirror.
 #
@@ -15,7 +13,7 @@
 # Env overrides:
 #   UPSTREAM_REMOTE=origin   canonical remote (default: origin)
 #   FORK_REMOTE=quanthub     mirror remote name (default: quanthub)
-#   FORK_URL=https://github.com/quanthubbr/tron-claude-config.git
+#   FORK_URL=<mirror git URL> (default below)
 #   BRANCH=main
 
 set -euo pipefail
@@ -104,7 +102,7 @@ push_to_mirror() {
   git push "$FORK_REMOTE" "$(upstream_ref):refs/heads/${BRANCH}"
   echo "Pushing tags → ${FORK_REMOTE}"
   git push "$FORK_REMOTE" --tags
-  echo "Done. Mirror updated: https://github.com/quanthubbr/tron-claude-config"
+  echo "Done. Mirror updated: ${FORK_URL%.git}"
 }
 
 pull_from_mirror() {
