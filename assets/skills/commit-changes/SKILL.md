@@ -5,7 +5,7 @@ model: sonnet
 
 Commit the current changes with semantic commits, scan for leaks, do a quick review, then push.
 
-<!-- Token `.claude/.commit-authorized` = only path through pyle.sh, pre-commit and pre-push; one-shot. -->
+<!-- Token `.claude/.commit-authorized` = only path through pyle.cjs, pre-commit and pre-push; one-shot. -->
 
 Steps:
 1. Run `git status --short` and `git branch --show-current`. If there is nothing to commit and nothing unpushed, say so and stop.
@@ -35,4 +35,4 @@ Steps:
 Notes:
 - If `$ARGUMENTS` is provided, use it as a hint for the branch name and/or commit grouping/scope.
 - Follow the user's global commit conventions in `~/.claude/CLAUDE.md` ("Git and organization").
-- The `.claude/hooks/pyle.sh commit` hook enforces this: it blocks `git commit` unless `.claude/.commit-authorized` is present. This is not optional — it is the actual enforcement mechanism.
+- The `.claude/hooks/pyle.cjs commit` hook enforces this: it blocks `git commit` unless `.claude/.commit-authorized` is present. This is not optional — it is the actual enforcement mechanism.

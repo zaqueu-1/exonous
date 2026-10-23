@@ -78,7 +78,7 @@
           {
             "type": "command",
             "if": "Bash(git commit *)",
-            "command": "bash .claude/hooks/pyle.sh commit"
+            "command": "node .claude/hooks/pyle.cjs commit --adapter claude --legacy-token"
           }
         ]
       },
@@ -88,7 +88,7 @@
           {
             "type": "command",
             "if": "Bash(gh pr create *)",
-            "command": "bash .claude/hooks/pyle.sh pr"
+            "command": "node .claude/hooks/pyle.cjs pr --adapter claude"
           }
         ]
       }

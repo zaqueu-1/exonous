@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync, spawn } = require('child_process');
+const { home } = require('./lib/paths.cjs');
 
 const ROOT = process.cwd();
 const STATE = path.join(ROOT, '.claude', '.exonous');
@@ -66,7 +67,7 @@ function main() {
   const note = takeNote();
   if (note) lines.push(note);
   const current = branch();
-  lines.push(`## Exonous workspace\n  root:   ${ROOT.replace(require('os').homedir(), '~')}\n  pm:     ${packageManager()}${current ? `\n  branch: ${current}` : ''}`);
+  lines.push(`## Exonous workspace\n  root:   ${ROOT.replace(home(), '~')}\n  pm:     ${packageManager()}${current ? `\n  branch: ${current}` : ''}`);
   if (!bin) lines.push(`exonous is not installed in node_modules — run \`${packageManager()} install\` to restore the gates.`);
   else if (updateDue()) startBackgroundUpdate(bin);
   process.stdout.write(`${lines.join('\n')}\n`);

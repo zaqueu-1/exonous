@@ -1,28 +1,8 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
-
-function home() {
-  return process.env.EXONOUS_HOME || os.homedir();
-}
-
-function claudeDir() {
-  return path.join(home(), '.claude');
-}
-
-function cursorDir() {
-  return path.join(home(), '.cursor');
-}
-
-function exoDir() {
-  return path.join(claudeDir(), 'exonous');
-}
-
-function stateDir() {
-  return path.join(exoDir(), 'state');
-}
+const base = require('../../assets/machine/hooks/lib/paths.cjs');
 
 /** @returns {'npm'|'pnpm'|'bun'} */
 function detectPm(env = process.env, packageRoot = path.join(__dirname, '..', '..')) {
@@ -40,4 +20,4 @@ function detectPm(env = process.env, packageRoot = path.join(__dirname, '..', '.
   return 'npm';
 }
 
-module.exports = { home, claudeDir, cursorDir, exoDir, stateDir, detectPm };
+module.exports = { ...base, detectPm };

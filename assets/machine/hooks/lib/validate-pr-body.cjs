@@ -2,6 +2,7 @@
 'use strict';
 
 const { validateBodyFile } = require('./pr-template-validate.cjs');
+const { resolveTemplate } = require('./template.cjs');
 
 const file = process.argv[2];
 if (!file) {
@@ -9,11 +10,12 @@ if (!file) {
   process.exit(2);
 }
 
-const result = validateBodyFile(file);
+const template = resolveTemplate(process.cwd());
+const result = validateBodyFile(file, process.cwd(), template);
 if (!result.ok) {
   process.stderr.write(`${result.reason}\n`);
   process.exit(1);
 }
 
-process.stdout.write('PR body OK — all 5 template titles present.\n');
+process.stdout.write(`PR body OK — all ${template.sections.length} template titles present (${template.path}).\n`);
 process.exit(0);

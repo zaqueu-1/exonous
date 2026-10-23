@@ -20,13 +20,18 @@ const ASSETS = path.join(PACKAGE_ROOT, 'assets');
 const REPO_FILES = [
   ['repo/AGENTS.md', 'AGENTS.md'],
   ['repo/claude/settings.json', '.claude/settings.json'],
-  ['repo/claude/PR-TEMPLATE.md', '.claude/PR-TEMPLATE.md'],
-  ['repo/claude/hooks/pyle.sh', '.claude/hooks/pyle.sh'],
-  ['repo/claude/hooks/kairos.cjs', '.claude/hooks/kairos.cjs'],
-  ['repo/claude/hooks/lib/pr-template-validate.cjs', '.claude/hooks/lib/pr-template-validate.cjs'],
-  ['repo/claude/hooks/lib/validate-pr-body.cjs', '.claude/hooks/lib/validate-pr-body.cjs'],
-  ['repo/claude/hooks/lib/pr-create-gate.cjs', '.claude/hooks/lib/pr-create-gate.cjs'],
-  ['repo/claude/hooks/lib/metron.cjs', '.claude/hooks/lib/metron.cjs'],
+  ['machine/PR-TEMPLATE.md', '.claude/PR-TEMPLATE.md'],
+  ['machine/hooks/pyle.cjs', '.claude/hooks/pyle.cjs'],
+  ['machine/hooks/kairos.cjs', '.claude/hooks/kairos.cjs'],
+  ['machine/hooks/lib/paths.cjs', '.claude/hooks/lib/paths.cjs'],
+  ['machine/hooks/lib/payload.cjs', '.claude/hooks/lib/payload.cjs'],
+  ['machine/hooks/lib/shell.cjs', '.claude/hooks/lib/shell.cjs'],
+  ['machine/hooks/lib/cli-options.cjs', '.claude/hooks/lib/cli-options.cjs'],
+  ['machine/hooks/lib/token.cjs', '.claude/hooks/lib/token.cjs'],
+  ['machine/hooks/lib/template.cjs', '.claude/hooks/lib/template.cjs'],
+  ['machine/hooks/lib/pr-template-validate.cjs', '.claude/hooks/lib/pr-template-validate.cjs'],
+  ['machine/hooks/lib/validate-pr-body.cjs', '.claude/hooks/lib/validate-pr-body.cjs'],
+  ['machine/hooks/lib/metron.cjs', '.claude/hooks/lib/metron.cjs'],
 ];
 const GIT_HOOKS = ['pre-commit', 'pre-push'];
 const GITIGNORE_ENTRIES = ['.claude/.commit-authorized', '.claude/.pr-body-draft.md', '.claude/.exonous/', '.cursor/', '.omc/'];
@@ -75,7 +80,6 @@ function copyRepoFiles({ root, dryRun, log }) {
     }
     fs.mkdirSync(path.dirname(destAbs), { recursive: true });
     fs.copyFileSync(path.join(ASSETS, src), destAbs);
-    if (dest.endsWith('.sh')) fs.chmodSync(destAbs, 0o755);
   }
 }
 
