@@ -8,7 +8,7 @@ const { mergeOwned, stripOwned } = require('../lib/settings');
 const { upsertMcpServers } = require('../lib/writers/toml-block');
 const { renderRules } = require('../lib/render-rules');
 const { OWNED_MARKER, hookCommand } = require('../lib/runtime');
-const { onPath, readJson, claudeMcp } = require('./shared');
+const { onPath, readJson, claudeMcp, mcpRow } = require('./shared');
 
 const TOOL = 'codex';
 const dir = () => path.join(paths.home(), '.codex');
@@ -50,6 +50,14 @@ function registeredCommand() {
 
 const selftestPayload = (command, cwd) => ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, cwd });
 
+function readText(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 function doctor() {
   let hooks = '';
   let agents = '';
@@ -65,6 +73,7 @@ function doctor() {
     { name: 'Codex CLI: gate approved in /hooks', ok: false, level: 'warn', status: PENDING, fix: 'open Codex, run /hooks and approve the exonous PreToolUse hook' },
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter codex')),
     row('nomos rule (AGENTS.md)', agents.includes('exonous:start')),
+    mcpRow('Codex CLI', ['atlas', 'biblos'].filter((k) => new RegExp(`^\\[mcp_servers\\.${k}\\]`, 'm').test(readText(path.join(dir(), 'config.toml'))))),
   ];
 }
 

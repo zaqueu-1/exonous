@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -198,6 +200,15 @@ test('a plain push from main is a push to main', () => {
   const fx = setup({ branch: 'main' });
   assert.strictEqual(run('push', claude('git push', fx.dir), fx.env).code, 2);
   assert.strictEqual(run('push', claude('git push origin feat/y', fx.dir), fx.env).code, 0);
+});
+
+test('pushing a branch that does not exist locally says so', () => {
+  const fx = setup();
+  withRemote(fx);
+  const res = run('push', claude('git push origin main', fx.dir), fx.env);
+  assert.strictEqual(res.code, 2);
+  assert.match(res.stderr, /there is no local branch "main" to push/);
+  assert.ok(!/cannot resolve what/.test(res.stderr));
 });
 
 test('gh pr create is checked against the template', () => {

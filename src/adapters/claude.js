@@ -4,11 +4,12 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('../lib/paths');
-const { onPath } = require('./shared');
+const { onPath, readJson, mcpRow, installDesignLinks } = require('./shared');
 const { mergeOwned, stripOwned, mergeAllow } = require('../lib/settings');
+const { sha256 } = require('../lib/home');
 const { installTechne, PLUGIN_ID } = require('../lib/techne');
 const { installAgents } = require('../lib/agents');
-const { ASSETS, OWNED_MARKER, COMMANDS, HOME_SKILLS, DESIGN_SKILLS, hookCommand, listFiles } = require('../lib/runtime');
+const { ASSETS, OWNED_MARKER, COMMANDS, HOME_SKILLS, DESIGN_SKILLS, hookCommand, listFiles, sharedSkillDir, foreignSkill } = require('../lib/runtime');
 
 const TOOL = 'claude';
 const ALLOW_PREFIX = 'Bash(exonous ';
@@ -31,25 +32,101 @@ function hookEntries(execPath) {
   };
 }
 
-function installSkills(home, log) {
-  const opts = { tool: TOOL };
-  for (const [name, files] of Object.entries(HOME_SKILLS)) {
-    const dir = path.join(paths.claudeDir(), 'skills', name);
-    const existing = path.join(dir, 'SKILL.md');
-    if (fs.existsSync(existing) && !new RegExp(`^name: ${name}\\r?$`, 'm').test(fs.readFileSync(existing, 'utf8'))) {
-      log(`WARN: ~/.claude/skills/${name}/ holds a different skill — left untouched`);
-      continue;
+/** Every file (or symlink) below dir as a relative POSIX path; directories are only containers. */
+function treeFiles(dir, rel = '') {
+  return fs.readdirSync(path.join(dir, rel), { withFileTypes: true }).flatMap((e) => {
+    const child = rel ? `${rel}/${e.name}` : e.name;
+    return e.isDirectory() ? treeFiles(dir, child) : [child];
+  });
+}
+
+/** Moves one file without ever replacing what is at the target (hard link + unlink; EEXIST means someone got there first). */
+function moveNoClobber(from, to) {
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  if (fs.lstatSync(from).isSymbolicLink()) fs.symlinkSync(fs.readlinkSync(from), to);
+  else {
+    try {
+      fs.linkSync(from, to);
+    } catch (err) {
+      if (err.code !== 'EXDEV' && err.code !== 'EPERM') throw err;
+      fs.copyFileSync(from, to, fs.constants.COPYFILE_EXCL);
     }
-    for (const file of files) home.sync(path.join(ASSETS, 'skills', name, file), path.join(dir, file), opts);
+  }
+  fs.unlinkSync(from);
+}
+
+/**
+ * An old real ~/.claude/skills/<name> becomes a link only after every file that is not an exact shipped file has moved,
+ * structure kept, into the shared dir. Any clash keeps the old dir as it is and skips the link.
+ */
+function adoptSkillDir(home, name, dir, shared, files, { dryRun, log }) {
+  const shipped = new Set(files);
+  const previous = home.ledger.previous;
+  // A file an older release shipped (ledger-tracked, unedited) is ours too.
+  const ours = (rel) => shipped.has(rel) || (() => {
+    const entry = previous[`.claude/skills/${name}/${rel}`];
+    try {
+      return Boolean(entry) && sha256(fs.readFileSync(path.join(dir, rel))) === entry.hash;
+    } catch {
+      return false;
+    }
+  })();
+  const personal = treeFiles(dir).filter((rel) => path.posix.basename(rel) !== '.DS_Store' && !ours(rel));
+  const clash = personal.find((rel) => fs.existsSync(path.join(shared, rel)) || isLink(path.join(shared, rel)));
+  if (clash) {
+    log(`WARN: ~/.claude/skills/${name}/${clash} also exists in ~/.agents/skills/${name} — kept ~/.claude/skills/${name} as it is (not linked); merge by hand, then rerun`);
+    return false;
+  }
+  if (dryRun) {
+    if (personal.length) log(`DRY: would move ${personal.length} personal file(s) from ~/.claude/skills/${name} to ~/.agents/skills/${name}`);
+    return false;
+  }
+  for (const rel of personal) {
+    try {
+      moveNoClobber(path.join(dir, rel), path.join(shared, rel));
+    } catch (err) {
+      log(`WARN: could not move ~/.claude/skills/${name}/${rel} (${err.message}) — kept ~/.claude/skills/${name} (not linked)`);
+      return false;
+    }
+  }
+  const left = treeFiles(dir).filter((rel) => path.posix.basename(rel) !== '.DS_Store' && !ours(rel));
+  if (left.length) {
+    log(`WARN: ~/.claude/skills/${name} still holds ${left.join(', ')} — kept (not linked)`);
+    return false;
+  }
+  return true;
+}
+
+function isLink(p) {
+  try {
+    return fs.lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
   }
 }
 
-function installDesignLinks(home, dryRun) {
-  for (const name of DESIGN_SKILLS) home.link(path.join(paths.home(), '.agents', 'skills', name), path.join(paths.claudeDir(), 'skills', name));
-  const patterns = path.join(paths.claudeDir(), 'skills', 'ui-patterns');
-  if (!dryRun) fs.rmSync(patterns, { recursive: true, force: true });
-  home.copyTree(path.join(ASSETS, 'skills', 'ui-patterns'), patterns);
+function installSkills(home, { dryRun, log }) {
+  for (const [name, files] of Object.entries(HOME_SKILLS)) {
+    const dir = path.join(paths.claudeDir(), 'skills', name);
+    const shared = sharedSkillDir(name);
+    if (foreignSkill(shared, name)) continue;
+    let stat = null;
+    try {
+      stat = fs.lstatSync(dir);
+    } catch {
+      // nothing there yet
+    }
+    if (stat && !stat.isSymbolicLink()) {
+      if (foreignSkill(dir, name)) {
+        log(`WARN: ~/.claude/skills/${name}/ holds a different skill — left untouched`);
+        continue;
+      }
+      if (!stat.isDirectory() || !adoptSkillDir(home, name, dir, shared, files, { dryRun, log })) continue;
+    }
+    home.link(shared, dir);
+  }
 }
+
 
 /** @param {{ home: object, dryRun: boolean, log: (m: string) => void, execPath: string, permissions?: boolean, external: boolean, detected: Record<string, boolean> }} ctx */
 function install(ctx) {
@@ -57,10 +134,10 @@ function install(ctx) {
   const opts = { tool: TOOL };
   home.sync(path.join(ASSETS, 'rules', 'nomos.md'), path.join(paths.claudeDir(), 'rules', 'nomos.md'), opts);
   for (const name of COMMANDS) home.sync(path.join(ASSETS, 'skills', name, 'SKILL.md'), path.join(paths.claudeDir(), 'commands', `${name}.md`), opts);
-  installSkills(home, log);
+  installSkills(home, { dryRun, log });
   const stack = path.join(ASSETS, 'techne', 'rules');
   for (const rel of listFiles(stack)) home.sync(path.join(stack, rel), path.join(paths.claudeDir(), 'rules', 'exonous', rel), opts);
-  installDesignLinks(home, dryRun);
+  installDesignLinks(home, paths.claudeDir(), { dryRun });
   if (ctx.external) installTechne({ dryRun, log });
   else log('techne plugin skipped: EXONOUS_HOME is not the real home, so the claude CLI is not called');
   installAgents({ dryRun, log, hasCursor: Boolean(ctx.detected.cursor), execPath: ctx.execPath });
@@ -104,6 +181,7 @@ function doctor() {
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(paths.claudeDir(), 'commands', `${c}.md`)))),
     row('skills', Object.keys(HOME_SKILLS).every((s) => fs.existsSync(path.join(paths.claudeDir(), 'skills', s, 'SKILL.md')))),
     row('agents exo-* + taxis', agents === 12 && hooks.includes('taxis.js'), 'exonous install', `${agents}/12 agents`),
+    mcpRow('Claude Code', [path.join(paths.claudeDir(), '.mcp.json'), path.join(paths.home(), '.claude.json')].flatMap((f) => Object.keys(readJson(f)?.mcpServers || {}))),
     row('techne plugin', fs.existsSync(path.join(paths.claudeDir(), 'techne')) && settings.enabledPlugins?.[PLUGIN_ID] !== false),
   ];
 }

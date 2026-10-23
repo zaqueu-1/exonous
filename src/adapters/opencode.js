@@ -9,7 +9,7 @@ const paths = require('../lib/paths');
 const { mergeList } = require('../lib/settings');
 const { toMdCommand, toOpencodeAgent } = require('../lib/convert/md-command');
 const { ASSETS, COMMANDS } = require('../lib/runtime');
-const { onPath, claudeMcp, mergeMcp, removeMcp } = require('./shared');
+const { onPath, claudeMcp, mergeMcp, removeMcp, selftestRepo, SELFTEST_DENY, mcpRow } = require('./shared');
 
 const TOOL = 'opencode';
 const SCRIPT_ONLY = 'script self-test (does not prove the tool loads the hook)';
@@ -86,16 +86,24 @@ function selftest() {
   const node = pluginNode();
   if (!node) return { ok: false, detail: 'gate plugin not installed' };
   if (!fs.existsSync(node)) return { ok: false, detail: `node binary from install is gone (${node}) — rerun exonous install` };
+  let repo;
+  try {
+    repo = selftestRepo();
+  } catch (err) {
+    return { ok: false, detail: `${SCRIPT_ONLY}: could not create a temp git repo (${err.message})` };
+  }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'exonous-selftest-'));
   const copy = path.join(tmp, 'exonous.mjs');
   fs.copyFileSync(pluginFile(), copy);
   const script = `const m = await import(${JSON.stringify(`file://${copy.split(path.sep).join('/')}`)});
-const hooks = await m.ExonousGate({ directory: ${JSON.stringify(tmp)} });
+const hooks = await m.ExonousGate({ directory: ${JSON.stringify(repo)} });
 try { await hooks['tool.execute.before']({ tool: 'bash' }, { args: { command: 'git commit -m exonous-selftest' } }); console.log('allow'); }
-catch { console.log('deny'); }`;
+catch (e) { console.log('deny: ' + e.message.split('\\n')[0]); }`;
   const res = spawnSync(node, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 30000 });
   fs.rmSync(tmp, { recursive: true, force: true });
-  return (res.stdout || '').trim() === 'deny'
+  fs.rmSync(repo, { recursive: true, force: true });
+  const out = (res.stdout || '').trim();
+  return out.startsWith('deny: ') && SELFTEST_DENY.test(out)
     ? { ok: true, detail: `${SCRIPT_ONLY}: gate plugin denies an unreviewed git commit` }
     : { ok: false, detail: `${SCRIPT_ONLY}: gate plugin did not deny (exit ${res.status}${res.error ? `, ${res.error.message}` : ''})` };
 }
@@ -114,6 +122,7 @@ function doctor() {
     row('nomos rule (instructions)', Array.isArray(config.instructions) && config.instructions.includes(rulesFile()), jsoncOnly() ? 'opencode.jsonc: add it by hand' : ''),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(dir(), 'commands', `${c}.md`)))),
     row('agents exo-*', agents === 12, `${agents}/12 agents`),
+    mcpRow('OpenCode', Object.keys(config.mcp || {})),
   ];
 }
 

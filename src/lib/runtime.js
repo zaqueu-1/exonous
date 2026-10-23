@@ -22,6 +22,17 @@ const HOME_SKILLS = {
   'issue-board': ['SKILL.md', 'board.mjs', 'render.py', 'config.example.json'],
 };
 const DESIGN_SKILLS = ['ui-design', 'ui-motion', 'native-ui', 'ui-mockup'];
+// HOME_SKILLS live in ~/.agents/skills (read by Gemini and OpenCode); Claude gets a link per skill.
+const sharedSkillDir = (name) => path.join(paths.home(), '.agents', 'skills', name);
+
+/** A SKILL.md under that name that is not ours (different `name:`): never overwritten or moved. */
+function foreignSkill(dir, name) {
+  try {
+    return !new RegExp(`^name: ${name}\\r?$`, 'm').test(fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8'));
+  } catch {
+    return false;
+  }
+}
 
 function packageVersion() {
   return JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')).version;
@@ -32,7 +43,11 @@ const uiDesignBin = () => path.join(paths.home(), '.agents', 'skills', 'ui-desig
 
 /** One argument for the shell that runs hook commands (sh; cmd.exe on Windows). */
 function shellQuote(value, platform = process.platform) {
-  if (platform === 'win32') return `"${String(value).replace(/"/g, '')}"`;
+  if (platform === 'win32') {
+    // cmd.exe expands %VAR% even inside quotes and has no reliable escape there, so such a path is refused.
+    if (/[%"]/.test(String(value))) throw new Error(`cannot use ${value} in a cmd.exe hook command: it contains % or " (cmd.exe would expand or split it); install Node or the home under a path without them`);
+    return `"${value}"`;
+  }
   return `"${String(value).replace(/[\\"$`]/g, (c) => `\\${c}`)}"`;
 }
 
@@ -142,6 +157,36 @@ function findOnPath(name, env = process.env) {
   return null;
 }
 
+const INSTALL_ERROR = 'exonous install did not finish — run `exonous install`';
+const installErrorFile = () => path.join(paths.stateDir(), 'last-install-error.json');
+
+/** Fixed text + time for doctor and the package manager; the details go to state/install.log (64 KB, one rotation). */
+function recordInstallError(detail) {
+  try {
+    fs.mkdirSync(paths.stateDir(), { recursive: true, mode: 0o700 });
+    const at = new Date().toISOString();
+    fs.writeFileSync(installErrorFile(), `${JSON.stringify({ text: INSTALL_ERROR, at })}\n`, { mode: 0o600 });
+    const log = path.join(paths.stateDir(), 'install.log');
+    const line = `${at} ${String(detail).slice(0, 4000)}\n`;
+    if (fs.existsSync(log) && fs.statSync(log).size + line.length > 64 * 1024) fs.renameSync(log, `${log}.1`);
+    fs.appendFileSync(log, line, { mode: 0o600 });
+  } catch {
+    // the state dir itself is unusable: the caller still prints INSTALL_ERROR
+  }
+}
+
+function clearInstallError() {
+  fs.rmSync(installErrorFile(), { force: true });
+}
+
+function readInstallError() {
+  try {
+    return JSON.parse(fs.readFileSync(installErrorFile(), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 const installInfoPath = () => path.join(paths.exoDir(), 'install.json');
 
 function readInstallInfo() {
@@ -180,7 +225,7 @@ function writeInstallInfo({ tools, dryRun = false }) {
 }
 
 module.exports = {
-  PACKAGE_ROOT, ASSETS, SOURCE, OWNED_MARKER, COMMANDS, HOME_SKILLS, DESIGN_SKILLS,
+  PACKAGE_ROOT, ASSETS, SOURCE, OWNED_MARKER, COMMANDS, HOME_SKILLS, DESIGN_SKILLS, sharedSkillDir, foreignSkill,
   packageVersion, uiDesignBin, shellQuote, hookCommand, listFiles, stageDir, installRuntime, readInstallInfo, writeInstallInfo,
-  isolatedHome, devCheckout, guardTarget, postinstallDecision,
+  isolatedHome, devCheckout, guardTarget, postinstallDecision, INSTALL_ERROR, recordInstallError, clearInstallError, readInstallError,
 };

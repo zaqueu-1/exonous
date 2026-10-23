@@ -8,7 +8,7 @@ const markers = require('../lib/writers/markers');
 const { mergeOwned, stripOwned } = require('../lib/settings');
 const { renderRules } = require('../lib/render-rules');
 const { OWNED_MARKER, hookCommand } = require('../lib/runtime');
-const { readJson, claudeMcp, mergeMcp, removeMcp } = require('./shared');
+const { readJson, claudeMcp, mergeMcp, removeMcp, mcpRow } = require('./shared');
 
 const TOOL = 'windsurf';
 const RULES_CAP = 6000;
@@ -105,6 +105,7 @@ function doctor() {
     row('gate hook (pre_run_command)', hooks.includes('pyle.cjs') && hooks.includes('--adapter windsurf'), 'create ~/.codeium/windsurf/hooks.json (e.g. `{}`) and rerun exonous install'),
     row('self-update trigger (pre_user_prompt)', hooks.includes('kairos.cjs')),
     rulesRow(rules),
+    mcpRow('Windsurf', mcpFiles().flatMap(({ file }) => Object.keys(readJson(file)?.mcpServers || {}))),
     { name: 'Windsurf: config paths', ok: false, level: 'warn', status: 'paths are moving to Devin Desktop (docs.devin.ai); exonous writes only into files that already exist', fix: 'rerun exonous install after Windsurf updates' },
   ];
 }

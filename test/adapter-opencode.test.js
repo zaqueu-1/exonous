@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -165,3 +167,18 @@ test('selftest runs the installed plugin gate on a synthetic event and expects a
   assert.ok(rows.every((r) => r.ok), JSON.stringify(rows));
   assert.deepStrictEqual(fs.readdirSync(osHome.osHome), []);
 });
+
+test('selftest reports a temp-repo failure instead of throwing', () => {
+  seed();
+  run();
+  const saved = process.env.PATH;
+  process.env.PATH = path.dirname(process.execPath);
+  try {
+    const res = selftest(opencode);
+    assert.strictEqual(res.ok, false);
+    assert.match(res.detail, /could not create a temp git repo/);
+  } finally {
+    process.env.PATH = saved;
+  }
+});
+

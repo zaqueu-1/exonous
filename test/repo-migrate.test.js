@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const { track } = require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -52,8 +54,8 @@ const USER_SETTINGS = {
 
 function shims() {
   const bin = process.env.PATH.split(path.delimiter)[0];
-  const log = path.join(path.dirname(bin), `pm-${path.basename(bin)}.log`);
-  const groot = path.join(path.dirname(bin), `groot-${path.basename(bin)}`);
+  const log = path.join(bin, 'pm.log');
+  const groot = path.join(bin, 'groot');
   // Records argv; like the real pm it drops removed packages, answers `root -g` and `--help`, and lays out a global install.
   const script = (pm) => `#!/usr/bin/env node
 const fs = require('fs');
@@ -104,7 +106,7 @@ function repo({ dep = 'exonous', lockfile = 'package-lock.json', worktree = fals
   git('commit', '-q', '-m', 'init');
   let root = dir;
   if (worktree) {
-    root = `${dir}-wt`;
+    root = track(`${dir}-wt`);
     git('worktree', 'add', '-q', root);
   }
   const hooksDir = path.resolve(root, execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root, env: { ...process.env, ...GIT_ENV }, encoding: 'utf8' }).trim());

@@ -129,10 +129,10 @@ function upsertFile(file, content, { style = 'html', dryRun = false, log = () =>
 }
 
 /**
- * @param {{ style?: 'html'|'hash', dryRun?: boolean, log?: (msg: string) => void }} [options]
+ * @param {{ style?: 'html'|'hash', dryRun?: boolean, log?: (msg: string) => void, keepEmpty?: boolean }} [options] keepEmpty: leave an empty file instead of deleting it.
  * @returns {{ status: 'removed'|'absent'|'malformed', body?: string }}
  */
-function removeFile(file, { style = 'html', dryRun = false, log = () => {} } = {}) {
+function removeFile(file, { style = 'html', dryRun = false, log = () => {}, keepEmpty = false } = {}) {
   const before = readText(file);
   if (before === null) return { status: 'absent' };
   const res = remove(before, style);
@@ -142,7 +142,7 @@ function removeFile(file, { style = 'html', dryRun = false, log = () => {} } = {
   }
   if (res.status === 'removed') {
     if (dryRun) log(`DRY: would remove exonous section from ${file}`);
-    else if (res.text) writeAtomic(file, res.text);
+    else if (res.text || keepEmpty) writeAtomic(file, res.text);
     else fs.rmSync(file, { force: true });
   }
   return { status: res.status, body: res.body };

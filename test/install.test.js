@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const { track } = require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -21,6 +23,9 @@ beforeEach(() => {
   fs.mkdirSync(path.join(process.env.EXONOUS_HOME, '.claude'));
 });
 afterEach(() => {
+  for (const dir of [process.env.EXONOUS_HOME, process.env.PATH.split(path.delimiter)[0]]) {
+    if (dir && dir.startsWith(os.tmpdir())) fs.rmSync(dir, { recursive: true, force: true });
+  }
   for (const [key, value] of [['EXONOUS_HOME', saved.home], ['PATH', saved.path]]) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -209,9 +214,9 @@ test('uninstall --dry-run changes nothing', async () => {
 
 test('ledger paths that escape the home are never removed', async () => {
   run();
-  const outside = path.join(path.dirname(process.env.EXONOUS_HOME), `escape-${path.basename(process.env.EXONOUS_HOME)}.txt`);
+  const outside = track(path.join(path.dirname(process.env.EXONOUS_HOME), `escape-${path.basename(process.env.EXONOUS_HOME)}.txt`));
   fs.writeFileSync(outside, 'keep');
-  const absolute = path.join(os.tmpdir(), `abs-${path.basename(process.env.EXONOUS_HOME)}.txt`);
+  const absolute = track(path.join(os.tmpdir(), `abs-${path.basename(process.env.EXONOUS_HOME)}.txt`));
   fs.writeFileSync(absolute, 'keep');
   const ledgerFile = home('.claude', 'exonous', 'installed.json');
   const ledger = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
@@ -316,4 +321,125 @@ test('a fixture home with all ten tools: doctor shows every tool with the right 
   assert.match(doctor, /⚠ Codex CLI: gate approved in \/hooks/);
   assert.ok(!/✗ (cline|qwen|kiro|aider): gate self-test/.test(doctor), 'soft and unsupported tools get no self-test');
   assert.deepStrictEqual(fs.readdirSync(osHome), []);
+});
+
+test('shellQuote: POSIX escapes, cmd.exe refuses characters it would expand or split', () => {
+  const { shellQuote } = require('../src/lib/runtime');
+  assert.strictEqual(shellQuote('/opt/node 20/bin/node', 'darwin'), '"/opt/node 20/bin/node"');
+  assert.strictEqual(shellQuote('/a/$HOME/`x`/"q"\\', 'linux'), '"/a/\\$HOME/\\`x\\`/\\"q\\"\\\\"');
+  assert.strictEqual(shellQuote('C:\\Program Files\\nodejs\\node.exe', 'win32'), '"C:\\Program Files\\nodejs\\node.exe"');
+  assert.throws(() => shellQuote('C:\\Users\\%USERNAME%\\node.exe', 'win32'), /% .*cmd\.exe/);
+  assert.throws(() => shellQuote('C:\\a"b\\node.exe', 'win32'), /"/);
+});
+
+
+// ── M8: shared skills in ~/.agents/skills ─────────────────────────────────────
+test('shared skills live in ~/.agents/skills and Claude links to them', () => {
+  run();
+  for (const name of ['deliver', 'project-memory', 'doc', 'issue-board', 'session-handoff']) {
+    assert.ok(fs.existsSync(home('.agents', 'skills', name, 'SKILL.md')), name);
+    assert.ok(fs.lstatSync(home('.claude', 'skills', name)).isSymbolicLink(), name);
+    assert.strictEqual(fs.realpathSync(home('.claude', 'skills', name)), fs.realpathSync(home('.agents', 'skills', name)));
+  }
+  assert.strictEqual(readLedger()['.agents/skills/deliver/SKILL.md'].tool, 'shared');
+});
+
+test('a real ~/.claude/skills dir is adopted: personal config and data move to the shared dir, nothing is lost', () => {
+  const old = home('.claude', 'skills', 'project-memory');
+  fs.mkdirSync(path.join(old, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(old, 'SKILL.md'), '---\nname: project-memory\n---\nold\n');
+  fs.writeFileSync(path.join(old, 'config.json'), '{"vault":"/v"}\n');
+  fs.writeFileSync(path.join(old, 'data', 'index.json'), '[1]\n');
+  run();
+  assert.ok(fs.lstatSync(old).isSymbolicLink());
+  assert.strictEqual(fs.readFileSync(home('.agents', 'skills', 'project-memory', 'config.json'), 'utf8'), '{"vault":"/v"}\n');
+  assert.strictEqual(fs.readFileSync(home('.agents', 'skills', 'project-memory', 'data', 'index.json'), 'utf8'), '[1]\n');
+  assert.strictEqual(fs.readFileSync(path.join(old, 'config.json'), 'utf8'), '{"vault":"/v"}\n', 'still visible through the link');
+});
+
+test('upgrading from a ledger that tracked ~/.claude/skills files never deletes the shared copy through the link', () => {
+  run();
+  const ledger = JSON.parse(fs.readFileSync(home('.claude', 'exonous', 'installed.json'), 'utf8'));
+  const entry = ledger.files['.agents/skills/deliver/SKILL.md'];
+  ledger.files['.claude/skills/deliver/SKILL.md'] = { ...entry, tool: 'claude' };
+  fs.writeFileSync(home('.claude', 'exonous', 'installed.json'), JSON.stringify(ledger));
+  run();
+  assert.ok(fs.existsSync(home('.agents', 'skills', 'deliver', 'SKILL.md')));
+  assert.ok(!('.claude/skills/deliver/SKILL.md' in readLedger()));
+});
+
+test('a different skill under ~/.claude/skills/<name> is left alone', () => {
+  fs.mkdirSync(home('.claude', 'skills', 'doc'), { recursive: true });
+  fs.writeFileSync(home('.claude', 'skills', 'doc', 'SKILL.md'), '---\nname: my-doc\n---\nmine\n');
+  const logs = [];
+  run({ log: (m) => logs.push(m) });
+  assert.ok(!fs.lstatSync(home('.claude', 'skills', 'doc')).isSymbolicLink());
+  assert.strictEqual(fs.readFileSync(home('.claude', 'skills', 'doc', 'SKILL.md'), 'utf8'), '---\nname: my-doc\n---\nmine\n');
+  assert.ok(logs.some((m) => /~\/\.claude\/skills\/doc\/ holds a different skill/.test(m)));
+});
+
+test('uninstall removes shared skill code and the Claude links, keeps personal config', async () => {
+  run();
+  fs.writeFileSync(home('.agents', 'skills', 'project-memory', 'config.json'), '{"vault":"/v"}\n');
+  await uninstall({ yes: true, log: () => {} });
+  assert.ok(!fs.existsSync(home('.agents', 'skills', 'deliver')));
+  assert.ok(!fs.existsSync(home('.claude', 'skills', 'deliver')));
+  assert.strictEqual(fs.readFileSync(home('.agents', 'skills', 'project-memory', 'config.json'), 'utf8'), '{"vault":"/v"}\n');
+  assert.ok(!fs.existsSync(home('.agents', 'skills', 'project-memory', 'SKILL.md')));
+});
+
+// ── M8: uninstall summary and pruning ─────────────────────────────────────────
+test('uninstall summarizes per directory, prunes dirs it emptied, keeps dirs holding anything foreign', async () => {
+  fs.mkdirSync(home('.gemini'));
+  fs.mkdirSync(home('.gemini', 'commands'), { recursive: true });
+  fs.writeFileSync(home('.gemini', 'commands', 'mine.toml'), 'prompt = "x"\n');
+  run();
+  const logs = [];
+  await uninstall({ yes: true, log: (m) => logs.push(m) });
+  assert.ok(!logs.some((m) => /^removed ~\/\.claude\/commands\/make-pr\.md$/.test(m)), 'no per-file lines by default');
+  assert.ok(logs.some((m) => /^removed \d+ (file|item)s? from ~\/\.claude\/commands$/.test(m)), logs.join('\n'));
+  assert.ok(!fs.existsSync(home('.claude', 'commands')), 'emptied dir pruned');
+  assert.ok(!fs.existsSync(home('.claude', 'skills', 'deliver')) && !fs.existsSync(home('.agents', 'skills', 'deliver')));
+  assert.ok(fs.existsSync(home('.claude')), 'tool roots are never removed');
+  assert.deepStrictEqual(fs.readdirSync(home('.gemini', 'commands')), ['mine.toml'], 'a dir holding anything foreign stays');
+  assert.ok(logs.some((m) => /last step: (npm uninstall|pnpm remove|bun remove) -g exonous/.test(m)));
+  const verbose = [];
+  run();
+  await uninstall({ yes: true, verbose: true, log: (m) => verbose.push(m) });
+  assert.ok(verbose.some((m) => /^removed ~\/\.claude\/commands\/make-pr\.md$/.test(m)));
+});
+
+test('uninstall --remove-package never runs a global pm in a redirected home', async () => {
+  run();
+  const logs = [];
+  await uninstall({ yes: true, removePackage: true, log: (m) => logs.push(m) });
+  assert.ok(logs.some((m) => /package removal skipped: EXONOUS_HOME points away from the real home/.test(m)), logs.join('\n'));
+});
+
+test('adoption moves personal files at any depth (references/my-notes.md) and keeps shipped ones for the link', () => {
+  const old = home('.claude', 'skills', 'deliver');
+  fs.mkdirSync(path.join(old, 'references'), { recursive: true });
+  fs.writeFileSync(path.join(old, 'SKILL.md'), '---\nname: deliver\n---\nold\n');
+  fs.writeFileSync(path.join(old, 'references', 'parallel.md'), 'shipped\n');
+  fs.writeFileSync(path.join(old, 'references', 'my-notes.md'), 'mine\n');
+  run();
+  assert.ok(fs.lstatSync(old).isSymbolicLink());
+  assert.strictEqual(fs.readFileSync(home('.agents', 'skills', 'deliver', 'references', 'my-notes.md'), 'utf8'), 'mine\n');
+});
+
+test('a personal file that clashes with one already in the shared dir keeps the old dir unlinked and untouched', () => {
+  run();
+  fs.writeFileSync(home('.agents', 'skills', 'doc', 'notes.md'), 'shared\n');
+  fs.rmSync(home('.claude', 'skills', 'doc'));
+  fs.mkdirSync(home('.claude', 'skills', 'doc', 'sub'), { recursive: true });
+  fs.writeFileSync(home('.claude', 'skills', 'doc', 'SKILL.md'), '---\nname: doc\n---\nold\n');
+  fs.writeFileSync(home('.claude', 'skills', 'doc', 'notes.md'), 'mine\n');
+  fs.writeFileSync(home('.claude', 'skills', 'doc', 'sub', 'keep.md'), 'mine too\n');
+  const logs = [];
+  run({ log: (m) => logs.push(m) });
+  assert.ok(!fs.lstatSync(home('.claude', 'skills', 'doc')).isSymbolicLink());
+  assert.strictEqual(fs.readFileSync(home('.claude', 'skills', 'doc', 'notes.md'), 'utf8'), 'mine\n');
+  assert.strictEqual(fs.readFileSync(home('.claude', 'skills', 'doc', 'sub', 'keep.md'), 'utf8'), 'mine too\n', 'nothing moved before the clash check');
+  assert.strictEqual(fs.readFileSync(home('.agents', 'skills', 'doc', 'notes.md'), 'utf8'), 'shared\n');
+  assert.ok(logs.some((m) => /WARN: ~\/\.claude\/skills\/doc\/notes\.md also exists in ~\/\.agents\/skills\/doc/.test(m)), logs.join('\n'));
 });

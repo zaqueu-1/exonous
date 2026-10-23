@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -195,6 +197,29 @@ test('a v2.0 ledger with bare hashes still prunes and keeps edits', () => {
     fs.writeFileSync(old, 'v1\n');
     createHome({ log: () => {}, previous: { '.claude/commands/old.md': sha256('v1\n') }, previousSections: [] }).prune('2.1.0', { tools: ['claude'] });
     assert.ok(!fs.existsSync(old));
+  } finally {
+    restore();
+  }
+});
+
+test('removing the only section keeps a file the user had (even empty) and deletes one exonous created', () => {
+  const { fake, file, restore } = sectionHome();
+  try {
+    fs.writeFileSync(file, '');
+    const created = path.join(fake, '.qwen', 'QWEN.md');
+    const home = createHome({ log: () => {}, previous: {}, previousSections: [] });
+    home.section(file, 'rules v1\n', { tool: 'gemini' });
+    home.section(created, 'rules v1\n', { tool: 'qwen' });
+    home.prune('2.1.0');
+    const again = createHome({ log: () => {} });
+    again.section(created, 'rules v1\n', { tool: 'qwen' });
+    again.prune('2.1.0');
+    const sections = JSON.parse(fs.readFileSync(ledgerPath(), 'utf8')).sections;
+    assert.strictEqual(sections.find((s) => s.path === '.qwen/QWEN.md').created, true, 'carried across reinstalls');
+    const final = createHome({ log: () => {} });
+    for (const entry of sections) final.removeSection(entry);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), '', 'the user\'s empty file survives');
+    assert.ok(!fs.existsSync(created));
   } finally {
     restore();
   }

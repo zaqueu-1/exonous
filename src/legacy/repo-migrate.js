@@ -435,4 +435,11 @@ function repoOf(packageRoot) {
   return i > 0 ? real.split(path.sep).slice(0, i).join(path.sep) || path.sep : null;
 }
 
-module.exports = { migrateRepo, repoOf, repoPm, loadManifest };
+/** v2 wrote repo files into INIT_CWD, which may be a workspace below the repo that owns node_modules. */
+function migrationRoot(packageRoot, env = process.env) {
+  const repo = repoOf(packageRoot);
+  const init = env.INIT_CWD && path.resolve(env.INIT_CWD);
+  return init && repo && (init === repo || init.startsWith(`${repo}${path.sep}`)) ? init : repo;
+}
+
+module.exports = { migrateRepo, migrationRoot, repoOf, repoPm, hasRepoInstall, loadManifest };

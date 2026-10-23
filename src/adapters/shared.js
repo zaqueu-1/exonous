@@ -2,7 +2,9 @@
 
 // Helpers every tool adapter shares: detection on PATH, Claude's MCP registrations, and owned MCP entries.
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const paths = require('../lib/paths');
 const { mergeKey } = require('../lib/settings');
 
@@ -87,10 +89,40 @@ function mergeMcp(file, { tool, key, entries, dryRun = false, log = () => {}, js
 /** Removes only the MCP entries exonous wrote for this tool, unchanged since. */
 const removeMcp = (file, options) => mergeMcp(file, { ...options, entries: {} });
 
+// A real deny names the review step; "not a git repository" or a crash must not pass as one.
+const SELFTEST_DENY = /exonous (token|workflow)/;
+
+/** Temp git repo with a staged file, so the self-test commit reaches the token check. Caller removes it. */
+function selftestRepo() {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'exonous-selftest-')));
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' };
+  execFileSync('git', ['init', '-q'], { cwd: dir, env, stdio: 'ignore' });
+  fs.writeFileSync(path.join(dir, 'selftest.txt'), 'exonous self-test\n');
+  execFileSync('git', ['add', 'selftest.txt'], { cwd: dir, env, stdio: 'ignore' });
+  return dir;
+}
+
+/** MCP coverage row: atlas/biblos are copied only when Claude Code has them, so a gap is a warning, not a failure. */
+function mcpRow(label, names) {
+  const have = MCP_KEYS.filter((k) => names.includes(k));
+  return have.length === MCP_KEYS.length
+    ? { name: `${label}: MCP (atlas, biblos)`, ok: true, status: '', fix: 'exonous install' }
+    : { name: `${label}: MCP (atlas, biblos)`, ok: false, level: 'warn', status: `${have.join(', ') || 'none'} registered; copied only from Claude Code's registrations`, fix: 'register atlas/biblos for Claude Code, then exonous install' };
+}
+
+/** Design skills live once in ~/.agents/skills; each tool gets links plus its own ui-patterns copy. */
+function installDesignLinks(home, toolDir, { dryRun }) {
+  const { ASSETS, DESIGN_SKILLS } = require('../lib/runtime');
+  for (const name of DESIGN_SKILLS) home.link(path.join(paths.home(), '.agents', 'skills', name), path.join(toolDir, 'skills', name));
+  const patterns = path.join(toolDir, 'skills', 'ui-patterns');
+  if (!dryRun) fs.rmSync(patterns, { recursive: true, force: true });
+  home.copyTree(path.join(ASSETS, 'skills', 'ui-patterns'), patterns);
+}
+
 /** Doctor row every soft-tier tool shows: rules may load, nothing blocks a commit. */
 const softRow = (label, what = 'rules only') => ({
   name: `${label}: gate`, ok: false, level: 'warn', status: `soft: not enforced — ${what}`,
   fix: 'commit through a hard-gated tool, or run `exonous workflow commit` and review by hand',
 });
 
-module.exports = { onPath, readJson, claudeMcp, mergeMcp, removeMcp, softRow, MCP_KEYS };
+module.exports = { onPath, readJson, claudeMcp, mergeMcp, removeMcp, softRow, mcpRow, installDesignLinks, selftestRepo, SELFTEST_DENY, MCP_KEYS };

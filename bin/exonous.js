@@ -12,7 +12,7 @@ Usage: exonous <command> [flags]
                 --dry-run  --quiet  --permissions  --tools a,b  --all  --skip-tool x  --rewrite-jsonc
   update        move to the latest release of this major   --check: report only  --major: cross a major
   doctor        check every piece and say how to fix what is missing
-  uninstall     remove exonous from this machine            --yes  --dry-run
+  uninstall     remove exonous from this machine            --yes  --dry-run  --verbose  --remove-package
   migrate       move a repo-mode (v2.0.0 or older) install of this repo to the machine install   --repo <dir>
   doctor/gate   exonous gate --selftest <tool>: pipe a fake git commit to the registered hook, expect a deny
 
@@ -44,19 +44,11 @@ function runRepoMigration(root, trigger = 'cli') {
   return result.status === 'blocked' ? 1 : 0;
 }
 
-function migrationRoot() {
-  const { repoOf } = require('../src/legacy/repo-migrate');
-  const repo = repoOf(path.join(__dirname, '..'));
-  const init = process.env.INIT_CWD && path.resolve(process.env.INIT_CWD);
-  // v2 wrote repo files into INIT_CWD; it may be a workspace below the repo that owns node_modules.
-  return init && repo && (init === repo || init.startsWith(`${repo}${path.sep}`)) ? init : repo;
-}
-
 function runInstall() {
   if (process.argv[2] === 'setup') {
     const lifecycle = process.env.npm_lifecycle_event === 'postinstall';
     const decision = require('../src/lib/runtime').postinstallDecision(process.env);
-    if (decision.action === 'migrate') return runRepoMigration(migrationRoot(), 'repo');
+    if (decision.action === 'migrate') return runRepoMigration(require('../src/legacy/repo-migrate').migrationRoot(path.join(__dirname, '..')), 'repo');
     if (lifecycle && decision.action === 'skip') {
       console.log(`[exonous] postinstall skipped: ${decision.reason}`);
       return 0;
@@ -158,7 +150,7 @@ const commands = {
   setup: runInstall,
   update: runUpdate,
   doctor: () => require('../src/doctor').doctor(),
-  uninstall: () => require('../src/uninstall').uninstall({ yes: flag('yes'), dryRun: flag('dry-run'), realHome: flag('real-home') }),
+  uninstall: () => require('../src/uninstall').uninstall({ yes: flag('yes'), dryRun: flag('dry-run'), realHome: flag('real-home'), verbose: flag('verbose'), removePackage: flag('remove-package') }),
   gate: runGate,
   migrate: () => runRepoMigration(path.resolve(value('repo') || process.cwd())),
   token: runToken,

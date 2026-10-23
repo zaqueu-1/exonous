@@ -46,6 +46,20 @@ const sectionKey = (entry) => `${entry.path}#${entry.marker}`;
 
 // v2.0 ledgers stored a bare hash per file; those entries belong to no tool and are always prunable.
 const fileEntry = (value) => (typeof value === 'string' ? { hash: value } : value);
+/** True when a parent directory of the ledger path (below the home) is a symlink: the file there belongs to its target. */
+function throughLink(rel) {
+  let cur = paths.home();
+  for (const seg of rel.split('/').slice(0, -1)) {
+    cur = path.join(cur, seg);
+    try {
+      if (fs.lstatSync(cur).isSymbolicLink()) return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 const prunable = (entry, tools) => !tools || !entry.tool || entry.tool === 'shared' || tools.includes(entry.tool);
 
 /**
@@ -167,6 +181,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
   /** @param {{ style?: string, tool?: string, writer?: (file: string) => { status: string, hash?: string } }} [options] writer replaces the plain marker upsert (e.g. TOML tables). */
   function section(destAbs, content, { style = 'html', tool, writer } = {}) {
     const rel = homeRel(destAbs);
+    const existed = fs.existsSync(destAbs);
     let res;
     try {
       res = writer ? writer(destAbs) : markers.upsertFile(destAbs, content, { style, dryRun, log });
@@ -175,13 +190,15 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
       log(`WARN: ~/${rel} section not synced: ${err.message}`);
       return;
     }
-    const entry = { path: rel, marker: style, hash: res.hash, ...(tool ? { tool } : {}) };
+    const old = ledger.previousSections.find((e) => sectionKey(e) === `${rel}#${style}`);
+    // A file exonous created may go when its section does; one the user had (even empty) always stays.
+    const created = Boolean(old ? old.created : !existed);
+    const entry = { path: rel, marker: style, hash: res.hash, ...(tool ? { tool } : {}), ...(created ? { created } : {}) };
     if (res.status !== 'malformed') {
       if (res.hash) ledger.currentSections.push(entry);
       return;
     }
     // Unmanageable now, but still ours: keep the old entry so prune does not retire it.
-    const old = ledger.previousSections.find((e) => sectionKey(e) === sectionKey(entry));
     if (old) ledger.currentSections.push(old);
   }
 
@@ -208,7 +225,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
         log(`kept your edits to the exonous section of ~/${entry.path} as ~/${entry.path}.exonous-section.bak`);
       }
     }
-    if (markers.removeFile(abs, { style: entry.marker, dryRun, log }).status === 'removed' && !dryRun) {
+    if (markers.removeFile(abs, { style: entry.marker, dryRun, log, keepEmpty: !entry.created }).status === 'removed' && !dryRun) {
       log(`retired exonous section from ~/${entry.path}`);
     }
   }
@@ -237,7 +254,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
           log(`WARN: ledger entry ${rel} points outside the home — left alone`);
           continue;
         }
-        if (!fs.existsSync(target)) continue;
+        if (!fs.existsSync(target) || throughLink(rel)) continue;
         if (sha256(fs.readFileSync(target)) !== entry.hash) {
           log(`kept ~/${rel} (edited since install; no longer managed)`);
           continue;
@@ -254,4 +271,4 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
   return { write, track, sync, copyTree, link, remove, section, removeSection, prune, ledger };
 }
 
-module.exports = { createHome, readLedger, readLedgerFile, homeRel, sha256, ledgerPath, contained };
+module.exports = { createHome, readLedger, readLedgerFile, homeRel, sha256, ledgerPath, contained, throughLink };

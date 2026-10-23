@@ -2,10 +2,10 @@
 
 // Adapter registry: every tool is detected once, before anything is written.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const paths = require('../lib/paths');
+const { selftestRepo, SELFTEST_DENY } = require('./shared');
 const claude = require('./claude');
 const cursor = require('./cursor');
 const gemini = require('./gemini');
@@ -68,13 +68,21 @@ function selftest(adapter) {
   if (!command) return { ok: false, detail: 'gate hook not registered' };
   const node = commandNode(command);
   if (!node || !fs.existsSync(node)) return { ok: false, detail: `node binary from install is gone (${node || 'unreadable command'}) — rerun exonous install` };
-  const input = JSON.stringify(adapter.selftestPayload('git commit -m exonous-selftest', os.tmpdir()));
+  let repo;
+  try {
+    repo = selftestRepo();
+  } catch (err) {
+    return { ok: false, detail: `${SCRIPT_ONLY}: could not create a temp git repo (${err.message})` };
+  }
+  const input = JSON.stringify(adapter.selftestPayload('git commit -m exonous-selftest', repo));
   const shell = process.platform === 'win32' ? ['cmd.exe', ['/d', '/s', '/c', `"${command}"`]] : ['sh', ['-c', command]];
-  const res = spawnSync(shell[0], shell[1], { input, encoding: 'utf8', timeout: 30000, windowsVerbatimArguments: true });
-  const denied = res.status === 2 || /"permission(Decision)?":"deny"/.test(res.stdout || '');
+  const res = spawnSync(shell[0], shell[1], { input, encoding: 'utf8', timeout: 30000, windowsVerbatimArguments: true, cwd: repo });
+  fs.rmSync(repo, { recursive: true, force: true });
+  const output = `${res.stdout || ''}${res.stderr || ''}`;
+  const denied = (res.status === 2 || /"permission(Decision)?":"deny"/.test(res.stdout || '')) && SELFTEST_DENY.test(output);
   return denied
     ? { ok: true, detail: `${SCRIPT_ONLY}: gate denies an unreviewed git commit` }
-    : { ok: false, detail: `${SCRIPT_ONLY}: gate did not deny (exit ${res.status}${res.error ? `, ${res.error.message}` : ''})` };
+    : { ok: false, detail: `${SCRIPT_ONLY}: gate did not deny with a review hint (exit ${res.status}${res.error ? `, ${res.error.message}` : ''}${output.trim() ? `: ${output.trim().split('\n')[0].slice(0, 120)}` : ''})` };
 }
 
 module.exports = { ADAPTERS, select, detectAll, readConfig, selftest, commandNode, SCRIPT_ONLY };

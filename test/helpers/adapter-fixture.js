@@ -27,6 +27,10 @@ function useFixtureHome() {
     process.env.EXONOUS_NO_UPDATE = '1';
   });
   afterEach(() => {
+    // Fixture homes hold a full design-stack copy each; leaking them fills the disk across runs.
+    for (const dir of [process.env.EXONOUS_HOME, state.osHome, process.env.PATH.split(path.delimiter)[0]]) {
+      if (dir && dir.startsWith(os.tmpdir())) fs.rmSync(dir, { recursive: true, force: true });
+    }
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

@@ -7,7 +7,7 @@ const paths = require('../lib/paths');
 const { mergeOwned, stripOwned } = require('../lib/settings');
 const { toTomlCommand } = require('../lib/convert/toml-command');
 const { ASSETS, OWNED_MARKER, COMMANDS, hookCommand } = require('../lib/runtime');
-const { onPath, readJson, claudeMcp, mergeMcp, removeMcp } = require('./shared');
+const { onPath, readJson, claudeMcp, mergeMcp, removeMcp, mcpRow } = require('./shared');
 
 const TOOL = 'gemini';
 const dir = () => path.join(paths.home(), '.gemini');
@@ -69,6 +69,7 @@ function doctor() {
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter gemini')),
     row('nomos rule (GEMINI.md)', md.includes('exonous:start') && fs.existsSync(rulesFile())),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(dir(), 'commands', `${c}.toml`)))),
+    mcpRow('Gemini CLI', Object.keys(readJson(settingsFile())?.mcpServers || {})),
   ];
 }
 

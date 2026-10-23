@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -21,6 +23,9 @@ beforeEach(() => {
   process.env.PATH = isolatedPath();
 });
 afterEach(() => {
+  for (const dir of [process.env.EXONOUS_HOME, process.env.PATH.split(path.delimiter)[0]]) {
+    if (dir && dir.startsWith(os.tmpdir())) fs.rmSync(dir, { recursive: true, force: true });
+  }
   for (const [key, value] of [['EXONOUS_HOME', saved.home], ['PATH', saved.path]]) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -152,4 +157,23 @@ test('hook commands quote the node and hook paths for the shell', () => {
   const { execFileSync } = require('child_process');
   const echoed = execFileSync('/bin/sh', ['-c', `printf '%s\\n' ${cmd.replace(' auto --adapter claude', '')}`], { encoding: 'utf8' }).split('\n');
   assert.strictEqual(echoed[0], '/opt/we"ird $dir/`n`\\node');
+});
+
+test('selftest fails when the registered gate denies for the wrong reason or crashes', () => {
+  const { selftest } = require('../src/adapters');
+  fs.mkdirSync(home('.claude'), { recursive: true });
+  run({ tools: ['claude'], execPath: process.execPath });
+  const claude = ADAPTERS.find((a) => a.id === 'claude');
+  assert.ok(selftest(claude).ok, selftest(claude).detail);
+  const fake = home('fake-gate.sh');
+  for (const body of ['echo "fatal: not a git repository" >&2; exit 2', 'exit 2', 'exit 0']) {
+    fs.writeFileSync(fake, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+    const settings = readJson('.claude', 'settings.json');
+    for (const entry of settings.hooks.PreToolUse) for (const h of entry.hooks) if (h.command.includes('pyle.cjs')) h.command = `"${process.execPath}" "${home('noop.js')}" pyle.cjs; sh "${fake}"`;
+    writeJson(settings, '.claude', 'settings.json');
+    fs.writeFileSync(home('noop.js'), '');
+    const res = selftest(claude);
+    assert.strictEqual(res.ok, false, body);
+    assert.match(res.detail, /did not deny with a review hint/);
+  }
 });

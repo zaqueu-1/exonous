@@ -89,16 +89,8 @@ function installAgents({ dryRun = false, log = () => {}, hasCursor, execPath = p
     }
   }
 
-  const rule = fs.readFileSync(path.join(PACKAGE_ROOT, 'assets', 'rules', 'nomos.md'), 'utf8');
-
   registerClaudeHooks(path.join(home, '.claude', 'settings.json'), `${shellQuote(execPath)} ${shellQuote(guardPath)} claude`);
   if (hasCursor) {
-    fs.mkdirSync(path.join(cursorDir, 'rules'), { recursive: true });
-    fs.writeFileSync(
-      path.join(cursorDir, 'rules', 'nomos.mdc'),
-      `---\ndescription: Exonous nomos — core rules and agent roster (enforced)\nalwaysApply: true\n---\n\n${rule}`,
-      'utf8',
-    );
     registerCursorHooks(path.join(cursorDir, 'hooks.json'), `${shellQuote(execPath)} ${shellQuote(guardPath)} cursor`);
   }
   log(`agents (${agentFiles.length}) installed and enforced → ~/.claude/agents${hasCursor ? ', ~/.cursor/agents' : ''}`);

@@ -150,7 +150,13 @@ function checkPush(call) {
   const deleted = plan.pushes.find((p) => p.src === null);
   if (deleted) return `deleting ${deleted.dst} needs a human`;
   const shas = plan.pushes.map((p) => (gitOut(call.cwd, ['rev-parse', '--verify', '--end-of-options', `${p.src}^{commit}`]) || '').trim());
-  if (shas.some((s) => !s)) return `cannot resolve what ${what} would send`;
+  const missing = plan.pushes.find((p, i) => !shas[i]);
+  if (missing) {
+    const branch = missing.src && !/[~^:@]|^HEAD$/.test(missing.src) ? missing.src.replace(/^refs\/heads\//, '') : null;
+    return branch
+      ? `there is no local branch "${branch}" to push (${what}); push the branch you mean, e.g. \`git push origin HEAD:${missing.dst}\`, after review`
+      : `cannot resolve what ${what} would send`;
+  }
   const state = token.verify('push', call.cwd, shas);
   if (!state.ok) return `${what} needs review; ${TOKEN_REASONS.push[state.reason]}`;
   const claimed = token.consume('push', call.cwd, shas);

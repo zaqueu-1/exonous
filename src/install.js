@@ -8,7 +8,7 @@ const { createHome } = require('./lib/home');
 const { ensureAtlas } = require('./lib/atlas');
 const { ensureBiblos } = require('./lib/biblos');
 const { select, ADAPTERS } = require('./adapters');
-const { ASSETS, DESIGN_SKILLS, packageVersion, installRuntime, writeInstallInfo, isolatedHome, guardTarget } = require('./lib/runtime');
+const { ASSETS, DESIGN_SKILLS, HOME_SKILLS, sharedSkillDir, foreignSkill, packageVersion, installRuntime, writeInstallInfo, isolatedHome, guardTarget, recordInstallError, clearInstallError } = require('./lib/runtime');
 const legacy = require('./legacy/bridge');
 
 function defaultLog(msg) {
@@ -46,6 +46,17 @@ function gateProblems(adapter, { dryRun, warnings, problems }) {
   return [{ tool: adapter.id, what: 'gate', reason, fix }, ...out];
 }
 
+function installSharedSkills(home, log) {
+  for (const [name, files] of Object.entries(HOME_SKILLS)) {
+    const dir = sharedSkillDir(name);
+    if (foreignSkill(dir, name)) {
+      log(`WARN: ~/.agents/skills/${name}/ holds a different skill — left untouched`);
+      continue;
+    }
+    for (const file of files) home.sync(path.join(ASSETS, 'skills', name, file), path.join(dir, file));
+  }
+}
+
 /**
  * @param {{ dryRun?: boolean, quiet?: boolean, permissions?: boolean, tools?: string[] | null, all?: boolean, skip?: string[],
  *   external?: boolean, execPath?: string, log?: (msg: string) => void }} [options]
@@ -67,6 +78,7 @@ function install({
   });
   step(emit, 'biblos', () => ensureBiblos({ dryRun }));
   step(emit, 'design stack', () => installDesignStack(home, { dryRun, log: emit }));
+  step(emit, 'shared skills', () => installSharedSkills(home, emit));
   if (!step(emit, 'runtime', () => installRuntime(home, { dryRun }))) home.ledger.complete = false;
   const inactive = [];
   for (const adapter of selected) {
@@ -81,12 +93,17 @@ function install({
     inactive.push(...gateProblems(adapter, { dryRun, warnings, problems: (result && result.problems) || [] }));
   }
   writeInstallInfo({ tools: Object.fromEntries(selected.map((a) => [a.id, a])), dryRun });
+  const complete = home.ledger.complete;
   home.prune(packageVersion(), { tools: selected.map((a) => a.id) });
+  if (!dryRun) {
+    if (complete) clearInstallError();
+    else recordInstallError(`install v${packageVersion()} incomplete: some files failed to sync (see the WARN lines of that run)`);
+  }
   for (const p of inactive) emit(`⚠ ${p.tool}: ${p.what} NOT active — ${p.reason}; fix: ${p.fix}`);
   for (const adapter of selected.filter((a) => a.gate === 'soft')) emit(`⚠ ${adapter.id}: ${adapter.softNote || 'rules only'} — commits are NOT gated`);
   for (const adapter of ADAPTERS.filter((a) => a.gate === 'none' && detected[a.id])) emit(`⚠ ${adapter.id}: unsupported — ${adapter.HINT}`);
   emit(`install ${dryRun ? 'dry run ' : ''}done (v${packageVersion()}) — ${selected.map((a) => a.id).join(', ') || 'no tools'}`);
-  return { tools: selected.map((a) => a.id), inactive };
+  return { tools: selected.map((a) => a.id), inactive, complete };
 }
 
 module.exports = { install, isolatedHome };

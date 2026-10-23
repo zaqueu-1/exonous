@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./helpers/tmp-cleanup');
+
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -76,7 +78,7 @@ test('a due check is claimed before the detached update runs; the next tool with
   assert.strictEqual(res.status, 0);
   assert.ok(Date.now() - started < 5000, 'session never waits for the update');
   assert.ok(fs.existsSync(path.join(fx.state, 'last-check')), 'last-check written before spawning');
-  assert.ok(await waitFor(() => fx.note() !== ''), 'background update ran and left a note');
+  assert.ok(await waitFor(() => fx.note() !== '' && !fs.existsSync(path.join(fx.state, 'update.lock'))), 'background update ran and left a note');
   const next = kairos(fx, ['--adapter', 'cursor']);
   assert.match(next.stdout, /v2\.1\.0 → v2\.2\.0/);
   await new Promise((r) => setTimeout(r, 500));
@@ -115,6 +117,8 @@ test('windsurf mode only stats last-check: silent, spawns only when due', { skip
   res = kairos(fx, ['--adapter', 'windsurf']);
   assert.strictEqual(res.stdout, '');
   assert.ok(await waitFor(() => fx.installCalls().length === 1), 'due check spawned the update');
+  // The detached update must finish before the fixture is removed, or it recreates the deleted home.
+  assert.ok(await waitFor(() => fx.note() !== '' && !fs.existsSync(path.join(fx.state, 'update.lock'))));
 });
 
 test('always exits 0, even when the home is broken', { skip }, () => {

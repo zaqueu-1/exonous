@@ -4,8 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('./lib/paths');
-const { select, selftest, ADAPTERS } = require('./adapters');
-const { DESIGN_SKILLS, packageVersion, readInstallInfo } = require('./lib/runtime');
+const { select, selftest, readConfig, ADAPTERS } = require('./adapters');
+const { onPath } = require('./adapters/shared');
+const { readLedger, sha256 } = require('./lib/home');
+const { DESIGN_SKILLS, packageVersion, readInstallInfo, readInstallError } = require('./lib/runtime');
 const { LEFTOVERS } = require('./legacy/bridge');
 const selfupdate = require('../assets/machine/hooks/lib/selfupdate.cjs');
 
@@ -59,16 +61,94 @@ function sharedChecks() {
   ];
 }
 
-function doctor() {
+// Cells for the coverage matrix, read from each adapter's doctor rows by what they are about.
+const COLUMNS = { Rules: /rule|nomos/i, Commands: /command|skills/i, MCP: /\bMCP\b/, Update: /kairos|self-update|pre_user_prompt/i };
+const TIER = { 1: 'full', 2: 'hard-reduced', 3: 'soft', 0: 'unsupported' };
+
+function cell(rows) {
+  if (!rows.length) return '—';
+  if (rows.some((r) => !r.ok && r.level !== 'warn')) return '✗';
+  return rows.some((r) => !r.ok) ? '⚠' : '✓';
+}
+
+function gateCell(adapter, result) {
+  if (adapter.gate === 'soft') return 'soft: not enforced';
+  if (adapter.gate === 'none') return 'unsupported';
+  if (!adapter.registeredCommand()) return 'hard (not registered)';
+  return `hard (registered, selftest ${result && result.ok ? 'ok' : 'FAILED'})`;
+}
+
+function matrix({ selected, detected, disabled, rowsById, selftests }) {
+  const header = ['Tool', 'Tier', 'Rules', 'Gate', 'Commands', 'MCP', 'Update'];
+  const lines = ADAPTERS.map((a) => {
+    const tier = a.tierLabel || TIER[a.tier] || String(a.tier);
+    if (!detected[a.id]) return [a.id, tier, '', 'not installed', '', '', ''];
+    if (a.gate !== 'none' && !selected.includes(a)) return [a.id, tier, '', disabled.includes(a.id) ? 'skipped' : 'not selected', '', '', ''];
+    const rows = rowsById[a.id] || [];
+    const pick = (re) => cell(rows.filter((r) => re.test(r.name)));
+    return [a.id, tier, pick(COLUMNS.Rules), gateCell(a, selftests[a.id]), pick(COLUMNS.Commands), pick(COLUMNS.MCP), pick(COLUMNS.Update)];
+  });
+  const widths = header.map((h, i) => Math.max(h.length, ...lines.map((l) => l[i].length)));
+  const fmt = (cols) => `  ${cols.map((c, i) => c.padEnd(widths[i])).join(' | ').trimEnd()}`;
+  return [fmt(header), `  ${widths.map((w) => '-'.repeat(w)).join('-|-')}`, ...lines.map(fmt)].join('\n');
+}
+
+/** Hook files under ~/.claude/exonous/hooks whose bytes no longer match what install recorded; null when none are tracked. */
+function changedHooks() {
+  const tracked = Object.entries(readLedger() || {}).filter(([rel]) => rel.startsWith('.claude/exonous/hooks/'));
+  if (!tracked.length) return null;
+  return tracked
+    .filter(([rel, entry]) => {
+      try {
+        return sha256(fs.readFileSync(path.join(paths.home(), rel))) !== (entry.hash || entry);
+      } catch {
+        return true;
+      }
+    })
+    .map(([rel]) => rel.replace('.claude/exonous/', ''));
+}
+
+function machineChecks(cwd) {
+  const info = readInstallInfo();
+  const rows = [];
+  const failed = readInstallError();
+  if (failed) rows.push({ name: 'last install finished', ok: false, status: `${failed.text} (${failed.at}); details in ~/.claude/exonous/state/install.log`, fix: FIX });
+  if (info) {
+    const pmOk = (info.pmPath && fs.existsSync(info.pmPath)) || onPath(info.pm || 'npm');
+    rows.push({ name: `package manager (${info.pm}) on PATH`, ok: Boolean(pmOk), status: '', fix: `install ${info.pm} or reinstall exonous with the pm you use` });
+    if (info.packageRoot && !fs.existsSync(info.packageRoot)) {
+      rows.push({
+        name: `exonous package location ${info.packageRoot} is gone`, ok: false, level: 'warn',
+        status: 'the hooks still work; the exonous CLI and updates need a global copy',
+        fix: 'npm i -g github:zaqueu-1/exonous (or pnpm add -g github:zaqueu-1/exonous / bun add -g github:zaqueu-1/exonous), then exonous install',
+      });
+    }
+  }
+  const changed = changedHooks();
+  if (changed === null) rows.push({ name: 'hook scripts match the install', ok: false, level: 'warn', status: 'no hook entries tracked — reinstall', fix: FIX });
+  else rows.push({ name: 'hook scripts match the install', ok: !changed.length, status: changed.length ? `${changed.length} changed: ${changed.join(', ')}` : '', fix: FIX });
+  const { hasRepoInstall, loadManifest } = require('./legacy/repo-migrate');
+  if (hasRepoInstall(cwd, loadManifest())) {
+    rows.push({ name: `repo-mode install in ${cwd}`, ok: false, status: 'files from the v2.0.0-era repo install are still here', fix: 'run `exonous migrate` here' });
+  }
+  return rows;
+}
+
+function doctor({ cwd = process.cwd() } = {}) {
   const { selected: tools, detected } = select({});
+  const disabled = readConfig().disabledTools || [];
   const hints = ADAPTERS.filter((a) => a.gate === 'none' && detected[a.id]);
+  const selftests = {};
   const gates = tools.filter((a) => a.gate === 'hard').map((a) => {
     const result = selftest(a);
+    selftests[a.id] = result;
     return { name: `${a.id}: gate self-test`, ok: result.ok, status: result.detail, fix: 'exonous install' };
   });
-  const checks = [...sharedChecks(), ...updateChecks(), ...[...tools, ...hints].flatMap((a) => a.doctor({})), ...gates];
+  const rowsById = Object.fromEntries([...tools, ...hints].map((a) => [a.id, a.doctor({})]));
+  const checks = [...sharedChecks(), ...machineChecks(cwd), ...updateChecks(), ...Object.values(rowsById).flat(), ...gates];
   const groups = toolGroups(tools, hints);
   console.log(`exonous v${packageVersion()} — ${groups.header || 'no supported tool detected'}\n`);
+  console.log(`${matrix({ selected: tools, detected, disabled, rowsById, selftests })}\n`);
   const { text, failed } = report(checks);
   console.log(text);
   if (groups.header) console.log(groups.summary);

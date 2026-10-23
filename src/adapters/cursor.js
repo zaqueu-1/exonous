@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('../lib/paths');
-const { onPath } = require('./shared');
+const { onPath, readJson, mcpRow, installDesignLinks } = require('./shared');
 const { mergeOwned, stripOwned } = require('../lib/settings');
 const { ASSETS, OWNED_MARKER, COMMANDS, DESIGN_SKILLS, hookCommand, uiDesignBin } = require('../lib/runtime');
 
@@ -40,10 +40,7 @@ function install({ home, dryRun, log, execPath }) {
     const content = fs.readFileSync(path.join(ASSETS, 'skills', name, 'SKILL.md'), 'utf8');
     home.write(path.join(paths.cursorDir(), 'skills', name, 'SKILL.md'), withName(content, name), opts);
   }
-  for (const name of DESIGN_SKILLS) home.link(path.join(paths.home(), '.agents', 'skills', name), path.join(paths.cursorDir(), 'skills', name));
-  const patterns = path.join(paths.cursorDir(), 'skills', 'ui-patterns');
-  if (!dryRun) fs.rmSync(patterns, { recursive: true, force: true });
-  home.copyTree(path.join(ASSETS, 'skills', 'ui-patterns'), patterns);
+  installDesignLinks(home, paths.cursorDir(), { dryRun });
   const gate = {
     beforeShellExecution: [{ command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter cursor') }],
     sessionStart: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter cursor') }],
@@ -84,6 +81,7 @@ function doctor() {
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter cursor')),
     row('nomos.mdc rule', fs.existsSync(path.join(paths.cursorDir(), 'rules', 'nomos.mdc'))),
     row('skills', COMMANDS.every((c) => fs.existsSync(path.join(paths.cursorDir(), 'skills', c, 'SKILL.md')))),
+    mcpRow('Cursor', Object.keys(readJson(path.join(paths.cursorDir(), 'mcp.json'))?.mcpServers || {})),
     { name: 'Cursor: User Rules', ok: false, level: 'warn', status: 'cannot verify — Cursor keeps User Rules in its own settings', fix: USER_RULES },
   ];
 }
