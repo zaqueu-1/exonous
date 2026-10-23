@@ -107,6 +107,11 @@ test('stripOwned removes only owned entries and drops events it emptied', () => 
   });
   assert.strictEqual(stripOwned(fx.file, { format: 'windsurf', ownedMarker: OWNED }).status, 'written');
   assert.deepStrictEqual(fx.read(), { version: 1, hooks: { pre_run_command: [{ command: 'mine' }] } });
+  const only = fixture('settings.json', { model: 'x', hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: ours('gate') }] }] } });
+  stripOwned(only.file, { format: 'claude', ownedMarker: OWNED });
+  assert.deepStrictEqual(only.read(), { model: 'x' });
+  const empty = fixture('settings.json', { hooks: {} });
+  assert.strictEqual(stripOwned(empty.file, { format: 'claude', ownedMarker: OWNED }).status, 'unchanged');
   assert.strictEqual(stripOwned(path.join(fx.dir, 'absent.json'), { format: 'windsurf', ownedMarker: OWNED }).status, 'absent');
 });
 
@@ -154,5 +159,24 @@ test('Windows-style hook paths are still recognised as owned', () => {
   assert.strictEqual(pre[0].hooks[0].command, ours('gate'));
   const fx2 = fixture('settings.json', { hooks: { PreToolUse: [{ command: ours('gate') }] } });
   stripOwned(fx2.file, { format: 'claude', ownedMarker: '\\.claude\\exonous\\hooks\\' });
-  assert.deepStrictEqual(fx2.read(), { hooks: {} });
+  assert.deepStrictEqual(fx2.read(), {});
+});
+
+test('writes keep the file mode, follow a symlinked settings file, and back up with the same mode', () => {
+  if (process.platform === 'win32') return;
+  const fx = fixture('settings.json', userClaude);
+  fs.chmodSync(fx.file, 0o640);
+  mergeOwned(fx.file, { format: 'claude', entries: claudeEntries(), ownedMarker: OWNED });
+  assert.strictEqual(fs.statSync(fx.file).mode & 0o777, 0o640);
+  assert.strictEqual(fs.statSync(`${fx.file}.exonous.bak`).mode & 0o777, 0o640);
+  const real = path.join(fx.dir, 'dotfiles-settings.json');
+  fs.writeFileSync(real, JSON.stringify(userClaude));
+  fs.chmodSync(real, 0o600);
+  const link = path.join(fx.dir, 'linked.json');
+  fs.symlinkSync(real, link);
+  mergeOwned(link, { format: 'claude', entries: claudeEntries(), ownedMarker: OWNED });
+  assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the symlink is kept');
+  assert.strictEqual(JSON.parse(fs.readFileSync(real, 'utf8')).hooks.PreToolUse.length, 2);
+  assert.strictEqual(fs.statSync(real).mode & 0o777, 0o600);
+  assert.deepStrictEqual(fs.readdirSync(fx.dir).filter((f) => f.includes('.tmp')), []);
 });

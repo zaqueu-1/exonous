@@ -4,12 +4,11 @@
 const fs = require('fs');
 const path = require('path');
 const paths = require('./lib/paths');
-const { update } = require('./update');
-const { packageVersion, gitHooksDir, REPO_FILES, GIT_HOOKS, DESIGN_SKILLS, HOME_SKILLS, PACKAGE_ROOT } = require('./setup');
-const { PLUGIN_ID } = require('./lib/techne');
+const { select, selftest } = require('./adapters');
+const { DESIGN_SKILLS, packageVersion, readInstallInfo } = require('./lib/runtime');
 const { LEFTOVERS } = require('./legacy/bridge');
 
-const FIX_SETUP = 'npx exonous setup';
+const FIX = 'exonous install';
 
 function readJson(file) {
   try {
@@ -20,73 +19,39 @@ function readJson(file) {
 }
 
 function hasMcp(key) {
-  return [path.join(paths.home(), '.claude', '.mcp.json'), path.join(paths.home(), '.claude.json')]
+  return [path.join(paths.claudeDir(), '.mcp.json'), path.join(paths.home(), '.claude.json')]
     .some((file) => Boolean(readJson(file)?.mcpServers?.[key]));
 }
 
-function repoChecks(root) {
-  if (!fs.existsSync(path.join(root, '.git')) || path.resolve(root) === PACKAGE_ROOT) return [];
-  const missing = REPO_FILES.filter(([, dest]) => !fs.existsSync(path.join(root, dest))).map(([, dest]) => dest);
-  const hooksDir = gitHooksDir(root);
-  if (!hooksDir) {
-    return [
-      { name: 'repo gates (.claude/, AGENTS.md)', ok: !missing.length, detail: missing.join(', '), fix: FIX_SETUP },
-      { name: 'git hooks (pre-commit, pre-push)', ok: true, detail: 'core.hooksPath set: hooks owned by another tool' },
-    ];
-  }
-  const gitHooks = GIT_HOOKS.filter((name) => {
-    try {
-      return /exonous|commit-changes/.test(fs.readFileSync(path.join(hooksDir, name), 'utf8'));
-    } catch {
-      return false;
-    }
-  });
-  return [
-    { name: 'repo gates (.claude/, AGENTS.md)', ok: !missing.length, detail: missing.join(', '), fix: FIX_SETUP },
-    { name: 'git hooks (pre-commit, pre-push)', ok: gitHooks.length === GIT_HOOKS.length, fix: FIX_SETUP },
-  ];
-}
-
-function releaseCheck(root) {
-  try {
-    const result = update({ root, check: true });
-    const ok = ['current', 'pinned', 'absent'].includes(result.status);
-    const detail = { current: `v${result.to}`, pinned: `pinned to ${result.from}`, absent: 'not a dependency here', available: `v${result.from} → v${result.to}` }[result.status] || result.status;
-    return { name: 'release', ok, detail, fix: 'npx exonous update' };
-  } catch (err) {
-    return { name: 'release', ok: false, detail: `cannot reach remote (${err.message.split('\n')[0]})`, fix: 'check network/credentials, then npx exonous update' };
-  }
-}
-
-function machineChecks() {
-  const settings = readJson(path.join(paths.home(), '.claude', 'settings.json')) || {};
-  const agents = fs.existsSync(path.join(paths.home(), '.claude', 'agents'))
-    ? fs.readdirSync(path.join(paths.home(), '.claude', 'agents')).filter((f) => /^exo-.+\.md$/.test(f)).length
-    : 0;
-  const memoryConfig = readJson(path.join(paths.home(), '.claude', 'skills', 'project-memory', 'config.json'));
+function sharedChecks() {
+  const info = readInstallInfo();
+  const memoryConfig = readJson(path.join(paths.claudeDir(), 'skills', 'project-memory', 'config.json'));
   const leftovers = LEFTOVERS.filter((rel) => fs.existsSync(path.join(paths.home(), rel)));
   return [
-    { name: 'nomos (core rule)', ok: fs.existsSync(path.join(paths.home(), '.claude', 'rules', 'nomos.md')), fix: FIX_SETUP },
-    { name: 'agents exo-* + taxis', ok: agents === 12 && JSON.stringify(settings.hooks || {}).includes('taxis.js'), detail: `${agents}/12 agents`, fix: FIX_SETUP },
-    { name: 'skills', ok: Object.keys(HOME_SKILLS).every((s) => fs.existsSync(path.join(paths.home(), '.claude', 'skills', s, 'SKILL.md'))), fix: FIX_SETUP },
-    { name: 'design stack', ok: DESIGN_SKILLS.every((s) => fs.existsSync(path.join(paths.home(), '.agents', 'skills', s, 'SKILL.md'))), fix: FIX_SETUP },
-    { name: 'techne plugin', ok: fs.existsSync(path.join(paths.home(), '.claude', 'techne')) && settings.enabledPlugins?.[PLUGIN_ID] !== false, fix: FIX_SETUP },
-    { name: 'atlas MCP (code graph)', ok: hasMcp('atlas'), fix: 'node node_modules/exonous/src/lib/atlas.js --force' },
-    { name: 'biblos MCP (library docs)', ok: hasMcp('biblos'), fix: 'node node_modules/exonous/src/lib/biblos.js' },
+    { name: 'machine install (install.json)', ok: Boolean(info), status: info ? `v${info.version} via ${info.pm}` : '', fix: FIX },
+    { name: 'gate runtime (~/.claude/exonous/hooks)', ok: fs.existsSync(path.join(paths.exoDir(), 'hooks', 'pyle.cjs')), fix: FIX },
+    { name: 'design stack', ok: DESIGN_SKILLS.every((s) => fs.existsSync(path.join(paths.home(), '.agents', 'skills', s, 'SKILL.md'))), fix: FIX },
+    { name: 'atlas MCP (code graph)', ok: hasMcp('atlas'), fix: 'exonous install (or node <exonous>/src/lib/atlas.js --force)' },
+    { name: 'biblos MCP (library docs)', ok: hasMcp('biblos'), fix: 'exonous install' },
     {
       name: 'project-memory vault',
       ok: Boolean(process.env.PROJECT_MEMORY_VAULT || (memoryConfig?.vault && fs.existsSync(memoryConfig.vault))),
       fix: 'create ~/.claude/skills/project-memory/config.json with { "vault": "<abs path>" }',
     },
-    { name: 'no leftovers from older installs', ok: !leftovers.length, detail: leftovers.map((r) => `~/${r}`).join(', '), fix: FIX_SETUP },
+    { name: 'no leftovers from older installs', ok: !leftovers.length, status: leftovers.map((r) => `~/${r}`).join(', '), fix: FIX },
   ];
 }
 
-function doctor({ root = process.cwd() } = {}) {
-  const checks = [...repoChecks(root), releaseCheck(root), ...machineChecks()];
-  console.log(`exonous v${packageVersion()} — ${root.replace(paths.home(), '~')}\n`);
+function doctor() {
+  const tools = select({}).selected;
+  const gates = tools.map((a) => {
+    const result = selftest(a);
+    return { name: `${a.id}: gate self-test`, ok: result.ok, status: result.detail, fix: 'exonous install' };
+  });
+  const checks = [...sharedChecks(), ...tools.flatMap((a) => a.doctor({})), ...gates];
+  console.log(`exonous v${packageVersion()} — ${tools.map((a) => a.id).join(', ') || 'no supported tool detected'}\n`);
   for (const check of checks) {
-    const detail = check.detail ? ` (${check.detail})` : '';
+    const detail = check.status ? ` (${check.status})` : '';
     console.log(`  ${check.ok ? '✓' : '✗'} ${check.name}${detail}${check.ok ? '' : `\n      fix: ${check.fix}`}`);
   }
   const failed = checks.filter((c) => !c.ok).length;

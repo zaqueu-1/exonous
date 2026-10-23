@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const paths = require('./paths');
+const { shellQuote } = require('./runtime');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 const SRC = path.join(PACKAGE_ROOT, 'assets', 'agents');
@@ -56,7 +57,7 @@ function registerCursorHooks(hooksPath, command) {
   writeJson(hooksPath, config);
 }
 
-function installAgents({ dryRun = false, log = () => {}, hasCursor } = {}) {
+function installAgents({ dryRun = false, log = () => {}, hasCursor, execPath = process.execPath } = {}) {
   const home = paths.home();
   const stateDir = path.join(home, '.claude', 'exonous');
   const guardPath = path.join(stateDir, GUARD);
@@ -73,7 +74,9 @@ function installAgents({ dryRun = false, log = () => {}, hasCursor } = {}) {
   fs.copyFileSync(path.join(SRC, GUARD), guardPath);
   fs.copyFileSync(path.join(SRC, 'roster.json'), path.join(stateDir, 'roster.json'));
 
-  execFileSync(process.execPath, [guardPath, 'claude'], { input: '{"hook_event_name":"SessionStart"}', stdio: ['pipe', 'ignore', 'pipe'] });
+  // taxis resolves the home from the OS, so it is told which home this install targets.
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  execFileSync(process.execPath, [guardPath, 'claude'], { input: '{"hook_event_name":"SessionStart"}', stdio: ['pipe', 'ignore', 'pipe'], env });
 
   for (const file of agentFiles) {
     const content = fs.readFileSync(path.join(SRC, file), 'utf8');
@@ -88,7 +91,7 @@ function installAgents({ dryRun = false, log = () => {}, hasCursor } = {}) {
 
   const rule = fs.readFileSync(path.join(PACKAGE_ROOT, 'assets', 'rules', 'nomos.md'), 'utf8');
 
-  registerClaudeHooks(path.join(home, '.claude', 'settings.json'), `node "$HOME/.claude/exonous/${GUARD}" claude`);
+  registerClaudeHooks(path.join(home, '.claude', 'settings.json'), `${shellQuote(execPath)} ${shellQuote(guardPath)} claude`);
   if (hasCursor) {
     fs.mkdirSync(path.join(cursorDir, 'rules'), { recursive: true });
     fs.writeFileSync(
@@ -96,7 +99,7 @@ function installAgents({ dryRun = false, log = () => {}, hasCursor } = {}) {
       `---\ndescription: Exonous nomos — core rules and agent roster (enforced)\nalwaysApply: true\n---\n\n${rule}`,
       'utf8',
     );
-    registerCursorHooks(path.join(cursorDir, 'hooks.json'), `"${process.execPath}" "${guardPath}" cursor`);
+    registerCursorHooks(path.join(cursorDir, 'hooks.json'), `${shellQuote(execPath)} ${shellQuote(guardPath)} cursor`);
   }
   log(`agents (${agentFiles.length}) installed and enforced → ~/.claude/agents${hasCursor ? ', ~/.cursor/agents' : ''}`);
 }

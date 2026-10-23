@@ -56,7 +56,11 @@ function edit(file, mutate, { fallback, dryRun = false, log = () => {}, label })
     return { status: 'written' };
   }
   const backup = `${file}.exonous.bak`;
-  if (raw !== null && !fs.existsSync(backup)) fs.writeFileSync(backup, raw, 'utf8');
+  if (raw !== null && !fs.existsSync(backup)) {
+    const mode = fs.statSync(file).mode & 0o7777;
+    fs.writeFileSync(backup, raw, { encoding: 'utf8', flag: 'wx', mode });
+    fs.chmodSync(backup, mode);
+  }
   writeAtomic(file, `${bom}${JSON.stringify(config, null, 2)}\n`);
   return { status: 'written' };
 }
@@ -68,13 +72,16 @@ function stripHooks(config, ownedMarker) {
   if (config.hooks === undefined) return null;
   const marker = slashes(ownedMarker);
   if (!isObject(config.hooks)) return 'has a "hooks" value that is not an object';
+  let emptied = false;
   for (const [event, list] of Object.entries(config.hooks)) {
     if (!Array.isArray(list)) continue;
     const kept = list.filter((entry) => !slashes(JSON.stringify(entry)).includes(marker));
     if (kept.length === list.length) continue;
     if (kept.length) config.hooks[event] = kept;
     else delete config.hooks[event];
+    emptied = true;
   }
+  if (emptied && !Object.keys(config.hooks).length) delete config.hooks;
   return null;
 }
 
@@ -121,4 +128,21 @@ function mergeKey(file, { key, entries, dryRun, log }) {
   }, { fallback: adds ? () => ({}) : null, dryRun, log, label: `exonous ${key} entries` });
 }
 
-module.exports = { mergeOwned, stripOwned, mergeKey, FORMATS: Object.keys(SKELETONS) };
+/**
+ * Claude `permissions.allow`: drops entries starting with ownedPrefix, then appends `add`; other entries keep their order.
+ * @param {{ add: string[], ownedPrefix: string, dryRun?: boolean, log?: (msg: string) => void }} options
+ */
+function mergeAllow(file, { add, ownedPrefix, dryRun, log }) {
+  return edit(file, (config) => {
+    if (config.permissions === undefined && !add.length) return null;
+    if (config.permissions === undefined) config.permissions = {};
+    if (!isObject(config.permissions)) return 'has a "permissions" value that is not an object';
+    const current = config.permissions.allow === undefined ? [] : config.permissions.allow;
+    if (!Array.isArray(current)) return 'has a "permissions.allow" value that is not a list';
+    const kept = current.filter((item) => !(typeof item === 'string' && item.startsWith(ownedPrefix)));
+    config.permissions.allow = [...kept, ...add.filter((item) => !kept.includes(item))];
+    return null;
+  }, { fallback: add.length ? () => ({}) : null, dryRun, log, label: 'exonous permissions' });
+}
+
+module.exports = { mergeOwned, stripOwned, mergeKey, mergeAllow, FORMATS: Object.keys(SKELETONS) };

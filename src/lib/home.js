@@ -21,6 +21,14 @@ function homeRel(abs) {
   return path.relative(paths.home(), abs).split(path.sep).join('/');
 }
 
+/** Absolute path for a ledger entry, or null when the entry is absolute or escapes the home. */
+function contained(rel) {
+  if (typeof rel !== 'string' || !rel || path.isAbsolute(rel)) return null;
+  const base = path.resolve(paths.home());
+  const abs = path.resolve(base, rel);
+  return abs.startsWith(base + path.sep) ? abs : null;
+}
+
 function readLedgerFile(file) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -36,23 +44,28 @@ function readLedger(file = ledgerPath()) {
 
 const sectionKey = (entry) => `${entry.path}#${entry.marker}`;
 
+// v2.0 ledgers stored a bare hash per file; those entries belong to no tool and are always prunable.
+const fileEntry = (value) => (typeof value === 'string' ? { hash: value } : value);
+const prunable = (entry, tools) => !tools || !entry.tool || entry.tool === 'shared' || tools.includes(entry.tool);
+
 /**
  * @typedef {{ path: string, marker: 'html'|'hash', hash: string, tool?: string }} SectionEntry
  * @param {{ dryRun?: boolean, log: (msg: string) => void, previous?: Record<string, string>, previousSections?: SectionEntry[] }} options
  */
 function createHome({ dryRun = false, log, previous, previousSections }) {
   const ledger = {
-    previous: previous || readLedger() || {},
+    previous: Object.fromEntries(Object.entries(previous || readLedger() || {}).map(([rel, v]) => [rel, fileEntry(v)])),
     current: {},
     previousSections: previousSections || readLedgerFile(ledgerPath())?.sections || [],
     currentSections: [],
     complete: true,
   };
 
-  function write(destAbs, content) {
+  /** @param {{ tool?: string }} [options] adapter id, or 'shared' */
+  function write(destAbs, content, { tool = 'shared' } = {}) {
     const rel = homeRel(destAbs);
     const hash = sha256(content);
-    ledger.current[rel] = hash;
+    ledger.current[rel] = { hash, tool };
     if (dryRun) {
       log(`DRY: would sync ~/${rel}`);
       return;
@@ -60,7 +73,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
     try {
       const onDisk = fs.existsSync(destAbs) ? sha256(fs.readFileSync(destAbs)) : null;
       // A file that matches neither this release nor the last one we wrote holds the user's edits.
-      if (onDisk && onDisk !== hash && onDisk !== ledger.previous[rel]) {
+      if (onDisk && onDisk !== hash && onDisk !== (ledger.previous[rel] || {}).hash) {
         fs.copyFileSync(destAbs, `${destAbs}.bak`);
         log(`kept your edits to ~/${rel} as ~/${rel}.bak`);
       }
@@ -72,7 +85,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
     }
   }
 
-  function sync(srcAbs, destAbs) {
+  function sync(srcAbs, destAbs, options) {
     let content;
     try {
       content = fs.readFileSync(srcAbs);
@@ -81,7 +94,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
       log(`WARN: ~/${homeRel(destAbs)} not synced: ${err.message}`);
       return;
     }
-    write(destAbs, content);
+    write(destAbs, content, options);
   }
 
   function copyTree(srcAbs, destAbs, { exclude = ['__pycache__', '.DS_Store'] } = {}) {
@@ -168,7 +181,11 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
 
   /** @param {SectionEntry} entry */
   function removeSection(entry) {
-    const abs = path.join(paths.home(), entry.path);
+    const abs = contained(entry.path);
+    if (!abs) {
+      log(`WARN: ledger section ${entry.path} points outside the home — left alone`);
+      return;
+    }
     let text;
     try {
       text = fs.readFileSync(abs, 'utf8');
@@ -203,11 +220,19 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
         if (tools && entry.tool && !tools.includes(entry.tool)) ledger.currentSections.push(entry);
         else removeSection(entry);
       }
-      for (const [rel, hash] of Object.entries(ledger.previous)) {
+      for (const [rel, entry] of Object.entries(ledger.previous)) {
         if (rel in ledger.current) continue;
-        const target = path.join(paths.home(), rel);
+        if (!prunable(entry, tools)) {
+          ledger.current[rel] = entry;
+          continue;
+        }
+        const target = contained(rel);
+        if (!target) {
+          log(`WARN: ledger entry ${rel} points outside the home — left alone`);
+          continue;
+        }
         if (!fs.existsSync(target)) continue;
-        if (sha256(fs.readFileSync(target)) !== hash) {
+        if (sha256(fs.readFileSync(target)) !== entry.hash) {
           log(`kept ~/${rel} (edited since install; no longer managed)`);
           continue;
         }
@@ -215,12 +240,12 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
       }
     }
     if (dryRun) return;
-    fs.mkdirSync(paths.exoDir(), { recursive: true });
+    fs.mkdirSync(paths.exoDir(), { recursive: true, mode: 0o700 });
     const data = { version, files: ledger.current, sections: ledger.currentSections };
-    fs.writeFileSync(ledgerPath(), `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+    fs.writeFileSync(ledgerPath(), `${JSON.stringify(data, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   }
 
   return { write, sync, copyTree, link, remove, section, removeSection, prune, ledger };
 }
 
-module.exports = { createHome, readLedger, homeRel, sha256, ledgerPath };
+module.exports = { createHome, readLedger, readLedgerFile, homeRel, sha256, ledgerPath, contained };

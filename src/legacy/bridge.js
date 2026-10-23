@@ -1,6 +1,6 @@
 'use strict';
 
-// Bridge from @tron/claude-config to exonous. Delete src/legacy/ (and its two calls in src/setup.js) one release after the bridge.
+// Bridge from @tron/claude-config to exonous (machine side). Delete src/legacy/ and its call in src/install.js one release after the bridge.
 const fs = require('fs');
 const path = require('path');
 const paths = require('../lib/paths');
@@ -8,32 +8,7 @@ const { readLedger } = require('../lib/home');
 const { removePlugins, disablePlugin } = require('../lib/techne');
 const { removeWorkflowEngine } = require('./workflow-engine');
 
-const LEGACY_PACKAGE = '@tron/claude-config';
-const OLD_REPO = 'zaqueu-1/tron-claude-config';
-const NEW_REPO = 'zaqueu-1/exonous';
 const oldLedger = () => path.join(paths.home(), '.claude', 'tron', 'installed.json');
-
-const REPO_LEFTOVERS = [
-  '.claude/hooks/bootstrap-check.sh',
-  '.claude/hooks/bypass-check.sh',
-  '.claude/hooks/lib/read-budget.cjs',
-  '.claude/hooks/lib/harness-sha.cjs',
-  '.claude/hooks/lib/pr-template-validate.js',
-  '.claude/hooks/lib/validate-pr-body.js',
-  '.claude/hooks/lib/pr-create-gate.js',
-  '.claude/rules/tron',
-  '.claude/rules/ecc',
-  '.claude/.tron-scope.json',
-  '.claude/.ecc-scope.json',
-  '.claude/.harness-last-update',
-  '.claude/.harness-session',
-  '.github/hooks/tron-design.json',
-  '.github/hooks/impeccable.json',
-  '.github/hooks/kallos.json',
-  'scripts/setup-claude-harness.sh',
-];
-const OLD_GITIGNORE = ['.claude/.harness-last-update', '.claude/.harness-session'];
-const OLD_DESIGN_BIN = /\/skills\/(?:tron-design\/scripts\/tron-design|impeccable\/scripts\/impeccable|kallos\/scripts\/kallos)/;
 
 // Newest first: the first source to reach a target keeps its config. Greek names are unreleased 2.0.0 previews.
 const RENAMED_SKILLS = {
@@ -59,77 +34,11 @@ const RETIRED_HOME_PATHS = [
   '.claude/skills/andrej-karpathy-skills', '.cursor/rules/agent-roster.mdc', '.cursor/rules/tron-core.mdc',
 ];
 
-// ── Repo ─────────────────────────────────────────────────────────────────────
-
 function readJsonFile(file) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return null;
-  }
-}
-
-// Keeps key order and indentation so the diff in the consumer's package.json is one line.
-function rewriteDependency({ root, dryRun, log }) {
-  const file = path.join(root, 'package.json');
-  const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  const pkg = raw && readJsonFile(file);
-  if (!pkg) return;
-  let changed = false;
-  for (const field of ['devDependencies', 'dependencies']) {
-    const deps = pkg[field];
-    if (!deps || !(LEGACY_PACKAGE in deps)) continue;
-    pkg[field] = Object.fromEntries(Object.entries(deps).map(([name, spec]) => (
-      name === LEGACY_PACKAGE ? ['exonous', String(spec).replace(OLD_REPO, NEW_REPO)] : [name, spec]
-    )));
-    changed = true;
-  }
-  if (!changed) return;
-  if (dryRun) {
-    log(`DRY: would rename dependency ${LEGACY_PACKAGE} → exonous in package.json`);
-    return;
-  }
-  const indent = /\n(\s+)"/.exec(raw)?.[1] || '  ';
-  fs.writeFileSync(file, `${JSON.stringify(pkg, null, indent)}\n`, 'utf8');
-  log(`package.json: ${LEGACY_PACKAGE} → exonous (installed on the next session update)`);
-}
-
-function dropOldDesignHooks({ root, dryRun, log }) {
-  const file = path.join(root, '.cursor', 'hooks.json');
-  const config = fs.existsSync(file) && readJsonFile(file);
-  if (!config?.hooks) return;
-  let removed = 0;
-  for (const [event, entries] of Object.entries(config.hooks)) {
-    if (!Array.isArray(entries)) continue;
-    const kept = entries.filter((entry) => !OLD_DESIGN_BIN.test(JSON.stringify(entry)));
-    removed += entries.length - kept.length;
-    config.hooks[event] = kept;
-  }
-  if (!removed) return;
-  if (dryRun) log(`DRY: would drop ${removed} old design hook(s) from .cursor/hooks.json`);
-  else fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-}
-
-function migrateRepo({ root, dryRun, log }) {
-  rewriteDependency({ root, dryRun, log });
-  for (const rel of REPO_LEFTOVERS) {
-    const target = path.join(root, rel);
-    if (!fs.existsSync(target)) continue;
-    if (dryRun) {
-      log(`DRY: would remove ${rel}`);
-      continue;
-    }
-    fs.rmSync(target, { recursive: true, force: true });
-    log(`removed ${rel}`);
-  }
-  const scriptsDir = path.join(root, 'scripts');
-  if (!dryRun && fs.existsSync(scriptsDir) && fs.readdirSync(scriptsDir).length === 0) fs.rmdirSync(scriptsDir);
-  dropOldDesignHooks({ root, dryRun, log });
-  const gitignore = path.join(root, '.gitignore');
-  if (!dryRun && fs.existsSync(gitignore)) {
-    const content = fs.readFileSync(gitignore, 'utf8');
-    const kept = content.split('\n').filter((line) => !OLD_GITIGNORE.includes(line.trim())).join('\n');
-    if (kept !== content) fs.writeFileSync(gitignore, kept, 'utf8');
   }
 }
 
@@ -261,4 +170,4 @@ function migrateHome({ dryRun, log, home }) {
 // Checked by `exonous doctor` while the bridge ships.
 const LEFTOVERS = ['.claude/tron', '.claude/tron-kit', '.claude/rules/tron', '.claude/gsd-core'];
 
-module.exports = { migrateRepo, migrateHome, previousLedger, LEGACY_PACKAGE, LEFTOVERS };
+module.exports = { migrateHome, previousLedger, LEFTOVERS };

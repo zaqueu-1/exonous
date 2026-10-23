@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Pre-exec shell gate: pyle.cjs <commit|pr|push> [--adapter <id>] [--legacy-token]. Node builtins + ./lib only.
-const fs = require('fs');
-const path = require('path');
+// Pre-exec shell gate: pyle.cjs <auto|commit|pr|push> [--adapter <id>]. Node builtins + ./lib only.
 const { spawnSync } = require('child_process');
 const payload = require('./lib/payload.cjs');
 const token = require('./lib/token.cjs');
@@ -39,14 +37,6 @@ function denyText(mode, why) {
   if (mode === 'commit') return `exonous: git commit blocked — ${why}. Run \`exonous workflow commit\`, follow it (review), then \`exonous token commit\` and retry.`;
   if (mode === 'push') return `exonous: git push blocked — ${why}. Run \`exonous workflow commit\`, review, then \`exonous token push\` and retry.`;
   return `exonous: gh pr create blocked — ${why}. Run \`exonous workflow pr\`, review, then retry.`;
-}
-
-function legacyTokenExists(cwd) {
-  try {
-    return fs.existsSync(path.join(repoRoot(cwd), '.claude', '.commit-authorized'));
-  } catch {
-    return false;
-  }
 }
 
 // ── Commit ───────────────────────────────────────────────────────────────────
@@ -85,21 +75,17 @@ function scanStaged(cwd, warnings) {
   return `gitleaks did not pass the staged changes (${how}); remove any secret and re-stage, or allowlist a false positive in a separately reviewed commit${detail ? `:\n${detail}\n` : ''}`;
 }
 
-function checkCommit(call, { legacy, warnings }) {
+function checkCommit(call, { warnings }) {
   const parsed = parseOptions(call.args, COMMIT);
   if (parsed.error) return `cannot verify its options: ${parsed.error}`;
   if (has(parsed, 'help', 'dry-run')) return null;
   if (has(parsed, ...STAGING) || parsed.positional.length) {
     return 'commits that stage at commit time (-a, -i, -o, -p, pathspecs) are not covered by the token; stage with `git add`, mint the token, then run a plain `git commit`';
   }
-  const usesLegacy = legacy && legacyTokenExists(call.cwd);
-  if (!usesLegacy) {
-    const state = token.verify('commit', call.cwd);
-    if (!state.ok) return TOKEN_REASONS.commit[state.reason];
-  }
+  const state = token.verify('commit', call.cwd);
+  if (!state.ok) return TOKEN_REASONS.commit[state.reason];
   const leak = scanStaged(call.cwd, warnings);
   if (leak) return leak;
-  if (usesLegacy) return null;
   const claimed = token.consume('commit', call.cwd);
   return claimed.ok ? null : TOKEN_REASONS.commit[claimed.reason];
 }
@@ -138,7 +124,7 @@ function pushPlan(parsed, cwd) {
   return { force: force || refspecs.some((r) => r.startsWith('+')), all, pushes };
 }
 
-function checkPush(call, { legacy }) {
+function checkPush(call) {
   const override = call.configs.find((k) => /^(push|remote|branch)\./i.test(k));
   if (override) return `inline \`-c ${override}\` changes where the push goes`;
   const parsed = parseOptions(call.args, PUSH);
@@ -148,7 +134,6 @@ function checkPush(call, { legacy }) {
   const guarded = plan.pushes.find((p) => p.dst === null || PROTECTED.test(p.dst));
   const target = plan.all ? 'every branch' : guarded && (guarded.dst || 'an upstream that cannot be resolved');
   if (!plan.force && !target) return null;
-  if (legacy && legacyTokenExists(call.cwd)) return null;
   const what = plan.force ? 'force-push' : `push to ${target}`;
   if (plan.all) return `${plan.force ? 'force-push' : 'push'} touches every branch; push one branch at a time`;
   const deleted = plan.pushes.find((p) => p.src === null);
@@ -175,7 +160,7 @@ function checkPr(call) {
 // ── Gate ─────────────────────────────────────────────────────────────────────
 
 /** @returns {{ allow: boolean, reason?: string, warnings: string[] }} */
-function gate(mode, { command, cwd }, { legacy = false } = {}) {
+function gate(mode, { command, cwd }) {
   const warnings = [];
   const result = analyze(command, cwd);
   const deny = (why) => ({ allow: false, reason: denyText(mode, why), warnings });
@@ -194,13 +179,24 @@ function gate(mode, { command, cwd }, { legacy = false } = {}) {
   if (redirected) return deny(redirected);
   let reason;
   try {
-    if (mode === 'commit') reason = checkCommit(call, { legacy, warnings });
-    else if (mode === 'push') reason = checkPush(call, { legacy });
+    if (mode === 'commit') reason = checkCommit(call, { warnings });
+    else if (mode === 'push') reason = checkPush(call);
     else reason = checkPr(call);
   } catch (err) {
     reason = `the gate could not verify this command (${err.message})`;
   }
   return reason ? deny(reason) : { allow: true, warnings };
+}
+
+/** First deny across modes wins; one hook entry can gate commit, push and pr. */
+function gateAll(modes, input) {
+  const warnings = [];
+  for (const mode of modes) {
+    const result = gate(mode, input);
+    warnings.push(...result.warnings);
+    if (!result.allow) return { ...result, warnings };
+  }
+  return { allow: true, warnings };
 }
 
 // ── Entry ────────────────────────────────────────────────────────────────────
@@ -232,10 +228,10 @@ function main(argv) {
   process.stdin.on('data', (chunk) => { raw += chunk; });
   process.stdin.on('end', () => {
     try {
-      if (!MODES.includes(mode)) return failClosed(adapter, raw, `unknown gate mode "${mode}"`);
+      if (mode !== 'auto' && !MODES.includes(mode)) return failClosed(adapter, raw, `unknown gate mode "${mode}"`);
       const input = payload.parse(adapter, raw);
       if (!input) return failClosed(adapter, raw, 'hook input had no shell command');
-      const result = gate(mode, input, { legacy: argv.includes('--legacy-token') });
+      const result = gateAll(mode === 'auto' ? MODES : [mode], input);
       const warn = result.warnings.map((w) => `${w}\n`).join('');
       if (result.allow) return finish(payload.allow(adapter, result.warnings));
       const out = payload.deny(adapter, result.reason);
@@ -248,4 +244,4 @@ function main(argv) {
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { gate, pushPlan };
+module.exports = { gate, gateAll, pushPlan };

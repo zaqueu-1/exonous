@@ -1,18 +1,21 @@
 'use strict';
 
-// exonous uninstall: removes what setup wrote. Keeps MCP registrations (atlas, biblos) and per-person
-// config (project-memory vault, session-handoff, issue-board) — those are the user's, not ours.
+// exonous uninstall: removes only what install wrote; MCP registrations, config.json and agent-roles stay (they are the user's).
 const fs = require('fs');
 const path = require('path');
 const paths = require('./lib/paths');
 const readline = require('readline');
-const { createHome, readLedger } = require('./lib/home');
+const { createHome, readLedgerFile, ledgerPath, contained } = require('./lib/home');
+const { stripOwned } = require('./lib/settings');
 const { removePlugins, PLUGIN_ID, MARKETPLACE } = require('./lib/techne');
-const { REPO_FILES, GIT_HOOKS, DESIGN_SKILLS } = require('./setup');
-const { detectPm, findDependency } = require('./update');
+const { DESIGN_SKILLS, PACKAGE_ROOT, isolatedHome, guardTarget } = require('./lib/runtime');
+const { ADAPTERS } = require('./adapters');
 
+// Runtime pieces exonous ships into ~/.claude/exonous; everything else there belongs to the user.
+const RUNTIME = ['hooks', 'rules', 'state', 'PR-TEMPLATE.md', 'taxis.js', 'roster.json', 'install.json'];
+const KEPT = ['config.json', 'agent-roles'];
 
-function log(msg) {
+function defaultLog(msg) {
   process.stdout.write(`[exonous] ${msg}\n`);
 }
 
@@ -24,39 +27,21 @@ function confirm(question) {
   }));
 }
 
-function removeRepo(root, home) {
-  for (const [, dest] of REPO_FILES) home.remove(path.join(root, dest), dest);
-  for (const name of GIT_HOOKS) {
-    const hook = path.join(root, '.git', 'hooks', name);
-    if (fs.existsSync(hook) && /exonous|commit-changes/.test(fs.readFileSync(hook, 'utf8'))) home.remove(hook, `.git/hooks/${name}`);
-  }
-  for (const rel of ['.claude/rules/exonous', '.claude/.exonous', '.claude/.exonous-scope.json', '.github/hooks/ui-design.json']) {
-    home.remove(path.join(root, rel), rel);
-  }
-}
-
-function dropTaxisHooks() {
-  for (const file of [path.join(paths.home(), '.claude', 'settings.json'), path.join(paths.home(), '.cursor', 'hooks.json')]) {
-    let config;
-    try {
-      config = JSON.parse(fs.readFileSync(file, 'utf8'));
-    } catch {
+function removeMachine(home, { dryRun, log }) {
+  const ledger = readLedgerFile(ledgerPath()) || {};
+  for (const adapter of ADAPTERS) adapter.uninstall({ dryRun, log });
+  const taxis = '/.claude/exonous/taxis.js';
+  stripOwned(path.join(paths.claudeDir(), 'settings.json'), { format: 'claude', ownedMarker: taxis, dryRun, log });
+  stripOwned(path.join(paths.cursorDir(), 'hooks.json'), { format: 'cursor', ownedMarker: taxis, dryRun, log });
+  for (const entry of ledger.sections || []) home.removeSection(entry);
+  for (const rel of Object.keys(ledger.files || {})) {
+    const abs = contained(rel);
+    if (!abs) {
+      log(`WARN: ledger entry ${rel} points outside the home — left alone`);
       continue;
     }
-    for (const [event, entries] of Object.entries(config.hooks || {})) {
-      if (!Array.isArray(entries)) continue;
-      const kept = entries.filter((entry) => !JSON.stringify(entry).includes('taxis.js'));
-      if (kept.length) config.hooks[event] = kept;
-      else delete config.hooks[event];
-    }
-    fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-  }
-}
-
-function removeMachine(home) {
-  for (const rel of Object.keys(readLedger() || {})) {
-    home.remove(path.join(paths.home(), rel));
-    if (fs.existsSync(path.join(paths.home(), `${rel}.bak`))) log(`kept your backup ~/${rel}.bak`);
+    home.remove(abs);
+    if (fs.existsSync(`${abs}.bak`)) log(`kept your backup ~/${rel}.bak`);
   }
   for (const base of ['.claude', '.cursor']) {
     const dir = path.join(paths.home(), base, 'agents');
@@ -67,23 +52,25 @@ function removeMachine(home) {
     home.remove(path.join(paths.home(), '.agents', 'skills', name));
     for (const base of ['.claude', '.cursor', '.github']) home.remove(path.join(paths.home(), base, 'skills', name));
   }
-  home.remove(path.join(paths.home(), '.cursor', 'rules', 'nomos.mdc'));
-  dropTaxisHooks();
-  removePlugins([PLUGIN_ID], [MARKETPLACE], { log });
-  home.remove(path.join(paths.home(), '.claude', 'techne'));
-  home.remove(paths.exoDir());
+  if (!isolatedHome() && !dryRun) removePlugins([PLUGIN_ID], [MARKETPLACE], { log });
+  home.remove(path.join(paths.claudeDir(), 'techne'));
+  for (const rel of RUNTIME) home.remove(path.join(paths.exoDir(), rel));
+  home.remove(ledgerPath());
+  const left = fs.existsSync(paths.exoDir()) ? fs.readdirSync(paths.exoDir()) : [];
+  if (!left.length && !dryRun) fs.rmSync(paths.exoDir(), { recursive: true, force: true });
+  else if (left.length) log(`kept ${KEPT.map((k) => `~/.claude/exonous/${k}`).join(' and ')} (yours; delete by hand if unwanted)`);
 }
 
-async function uninstall({ root = process.cwd(), yes = false } = {}) {
-  if (!yes && !(await confirm('Remove exonous from this repo and this machine? [y/N] '))) {
+/** @param {{ yes?: boolean, dryRun?: boolean, realHome?: boolean, log?: (msg: string) => void }} [options] */
+async function uninstall({ yes = false, dryRun = false, realHome = false, log = defaultLog } = {}) {
+  guardTarget({ action: 'uninstall', dryRun, realHome, log });
+  if (!yes && !dryRun && !(await confirm(`Remove exonous from ${paths.home()}? [y/N] `))) {
     log('nothing removed');
     return 1;
   }
-  const home = createHome({ log });
-  if (fs.existsSync(path.join(root, '.git'))) removeRepo(root, home);
-  removeMachine(home);
-  const dep = findDependency(root);
-  if (dep) log(`last step: ${detectPm(root)} remove ${dep.name}`);
+  removeMachine(createHome({ dryRun, log }), { dryRun, log });
+  const pm = paths.detectPm(process.env, PACKAGE_ROOT);
+  log(`${dryRun ? 'dry run done. ' : ''}last step: ${pm} ${pm === 'npm' ? 'uninstall' : 'remove'} -g exonous`);
   log('kept: atlas/biblos MCP registrations and your skill config files');
   return 0;
 }

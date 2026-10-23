@@ -7,7 +7,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { test } = require('node:test');
-const { REPO_FILES, HOME_SKILLS, COMMANDS, DESIGN_SKILLS } = require('../src/setup');
+const { HOME_SKILLS, COMMANDS, DESIGN_SKILLS } = require('../src/lib/runtime');
 const { renderRules, VARIANTS } = require('../src/lib/render-rules');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -61,9 +61,12 @@ test('every exo-* and techne:* name in shipped docs exists', () => {
   assert.deepStrictEqual(unknown, []);
 });
 
-test('every file setup installs is shipped', () => {
+test('every file install writes is shipped', () => {
   const missing = [
-    ...REPO_FILES.map(([src]) => path.join(ASSETS, src)),
+    path.join(ASSETS, 'machine', 'PR-TEMPLATE.md'),
+    path.join(ASSETS, 'machine', 'hooks', 'pyle.cjs'),
+    path.join(ASSETS, 'editors', 'hooks', 'cursor', 'hooks.json'),
+    path.join(ASSETS, 'editors', 'cursor', 'frontend-skills.mdc'),
     ...Object.entries(HOME_SKILLS).flatMap(([name, files]) => files.map((f) => path.join(ASSETS, 'skills', name, f))),
     ...COMMANDS.map((name) => path.join(ASSETS, 'skills', name, 'SKILL.md')),
     ...DESIGN_SKILLS.map((name) => path.join(ASSETS, 'skills', name, 'SKILL.md')),

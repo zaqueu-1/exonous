@@ -160,3 +160,42 @@ test('an unedited section in a CRLF file retires without a .bak', () => {
     restore();
   }
 });
+
+test('file entries carry their tool and prune skips tools outside this run', () => {
+  const { fake, restore } = sectionHome();
+  try {
+    const claudeFile = path.join(fake, '.claude', 'rules', 'nomos.md');
+    const cursorFile = path.join(fake, '.cursor', 'rules', 'nomos.mdc');
+    const first = createHome({ log: () => {}, previous: {}, previousSections: [] });
+    first.write(claudeFile, 'c\n', { tool: 'claude' });
+    first.write(cursorFile, 'k\n', { tool: 'cursor' });
+    first.prune('2.1.0');
+    const ledger = JSON.parse(fs.readFileSync(ledgerPath(), 'utf8'));
+    assert.deepStrictEqual(ledger.files['.claude/rules/nomos.md'], { hash: sha256('c\n'), tool: 'claude' });
+    const second = createHome({ log: () => {} });
+    second.write(claudeFile, 'c\n', { tool: 'claude' });
+    second.prune('2.1.0', { tools: ['claude'] });
+    assert.ok(fs.existsSync(cursorFile), 'cursor file kept when cursor was not part of the run');
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(ledgerPath(), 'utf8')).files['.cursor/rules/nomos.mdc'], { hash: sha256('k\n'), tool: 'cursor' });
+    const third = createHome({ log: () => {} });
+    third.write(claudeFile, 'c\n', { tool: 'claude' });
+    third.prune('2.1.0', { tools: ['claude', 'cursor'] });
+    assert.ok(!fs.existsSync(cursorFile), 'cursor file retired when cursor ran and no longer wrote it');
+    assert.deepStrictEqual(readLedger(), { '.claude/rules/nomos.md': { hash: sha256('c\n'), tool: 'claude' } });
+  } finally {
+    restore();
+  }
+});
+
+test('a v2.0 ledger with bare hashes still prunes and keeps edits', () => {
+  const { fake, restore } = sectionHome();
+  try {
+    const old = path.join(fake, '.claude', 'commands', 'old.md');
+    fs.mkdirSync(path.dirname(old), { recursive: true });
+    fs.writeFileSync(old, 'v1\n');
+    createHome({ log: () => {}, previous: { '.claude/commands/old.md': sha256('v1\n') }, previousSections: [] }).prune('2.1.0', { tools: ['claude'] });
+    assert.ok(!fs.existsSync(old));
+  } finally {
+    restore();
+  }
+});

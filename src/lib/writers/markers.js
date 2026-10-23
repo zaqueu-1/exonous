@@ -81,11 +81,21 @@ function remove(text, styleName = 'html') {
   return { status: 'removed', text: before + after, body };
 }
 
+/** Atomic replace that keeps the file's mode and writes through a symlink instead of replacing it. */
 function writeAtomic(file, text) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.exonous-${process.pid}.tmp`;
-  fs.writeFileSync(tmp, text, 'utf8');
-  fs.renameSync(tmp, file);
+  let target = file;
+  let mode = null;
+  try {
+    if (fs.lstatSync(file).isSymbolicLink()) target = fs.realpathSync(file);
+    mode = fs.statSync(target).mode & 0o7777;
+  } catch {
+    // new file
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const tmp = `${target}.exonous-${process.pid}-${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(tmp, text, { encoding: 'utf8', flag: 'wx', mode: mode ?? 0o666 });
+  if (mode !== null) fs.chmodSync(tmp, mode);
+  fs.renameSync(tmp, target);
 }
 
 function readText(file) {

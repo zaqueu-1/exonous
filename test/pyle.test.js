@@ -212,12 +212,14 @@ test('gh pr create is checked against the template', () => {
   assert.match(res.stderr, /exonous workflow pr/);
 });
 
-test('the repo-mode legacy flag accepts .claude/.commit-authorized', () => {
-  const { dir, env } = setup();
-  fs.mkdirSync(path.join(dir, '.claude'));
-  fs.writeFileSync(path.join(dir, '.claude', '.commit-authorized'), '');
-  assert.strictEqual(run('commit', claude('git commit -m x', dir), env).code, 2);
-  assert.strictEqual(run('commit', claude('git commit -m x', dir), env, { extra: ['--legacy-token'] }).code, 0);
+test('auto mode gates commit, push and pr from one hook entry', () => {
+  const fx = setup();
+  assert.match(run('auto', claude('git commit -m x', fx.dir), fx.env).stderr, /exonous token commit/);
+  assert.match(run('auto', claude('git push -f', fx.dir), fx.env).stderr, /exonous token push/);
+  assert.match(run('auto', claude('gh pr create --fill', fx.dir), fx.env).stderr, /exonous workflow pr/);
+  assert.strictEqual(run('auto', claude('git status', fx.dir), fx.env).code, 0);
+  fx.mint('commit');
+  assert.strictEqual(run('auto', claude('git commit -m x', fx.dir), fx.env).code, 0);
 });
 
 test('unreadable input and unknown modes pass only when the text mentions neither git nor gh', () => {
