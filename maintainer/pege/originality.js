@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// upstream/originality.js — MAINTAINER ONLY: prove rewritten artifacts are tron's own text
-// Usage: npm run upstream:originality [-- <id>...] [-- --max <n>] [-- --show <n>]
-// For every source with an `originality` block: compares prose (code stripped) of the tron paths
-// against the upstream files at the pinned ref using 8-word shingles, and scans the tron paths
+// maintainer/pege/originality.js — MAINTAINER ONLY: prove rewritten artifacts are exonous's own text
+// Usage: npm run pege:originality [-- <id>...] [-- --max <n>] [-- --show <n>]
+// For every source with an `originality` block: compares prose (code stripped) of the local paths
+// against the upstream files at the pinned ref using 8-word shingles, and scans the local paths
 // for upstream brand terms (`brandTerms` in sources.json). With `protocol`, also fails when an engine
 // verb or flag the upstream uses is missing from the rewrite. Exit 1 on any violation.
 
@@ -13,12 +13,12 @@ const path = require('path');
 const { UPSTREAM_ROOT, loadSources, SOURCES_PATH } = require('./lib/sources');
 const { git, mirror } = require('./lib/git');
 
-const PACKAGE_ROOT = path.resolve(UPSTREAM_ROOT, '..');
+const PACKAGE_ROOT = path.resolve(UPSTREAM_ROOT, '..', '..');
 const SHINGLE = 8;
 const TEXT_EXT = new Set(['.md', '.mdc', '.txt']);
 
 function log(msg) {
-  process.stdout.write(`[upstream-originality] ${msg}\n`);
+  process.stdout.write(`[pege:originality] ${msg}\n`);
 }
 
 function parseArgs(argv) {
@@ -66,7 +66,7 @@ function shingles(words) {
   return out;
 }
 
-function tronFiles(relPaths, exclude) {
+function localFiles(relPaths, exclude) {
   const skip = (rel) => exclude.some((ex) => rel === ex || rel.startsWith(ex.endsWith('/') ? ex : `${ex}/`));
   const walk = (abs) => {
     const rel = path.relative(PACKAGE_ROOT, abs);
@@ -96,7 +96,7 @@ function upstreamCorpus(source, globs) {
 }
 
 // Protocol the rewrite must keep: every engine verb the upstream invokes, and every CLI flag it passes.
-function missingProtocol(protocol, upstreamTexts, tronText) {
+function missingProtocol(protocol, upstreamTexts, localText) {
   const verbAll = new RegExp(protocol.verbs, 'g');
   const verbLine = new RegExp(protocol.verbs);
   const flagRe = /(?<![\w-])--[a-z][a-z0-9-]*[a-z0-9]/g;
@@ -114,7 +114,7 @@ function missingProtocol(protocol, upstreamTexts, tronText) {
   return [...want].filter((item) => {
     const token = item.split(' ')[1];
     if (ignore.has(token)) return false;
-    return !new RegExp(`(?<![\\w-])${escape(token)}(?![\\w-])`).test(tronText);
+    return !new RegExp(`(?<![\\w-])${escape(token)}(?![\\w-])`).test(localText);
   }).sort();
 }
 
@@ -136,13 +136,13 @@ function stripEngineLiterals(text) {
 
 function checkSource(source, matchers, args) {
   const spec = source.originality;
-  const files = tronFiles(spec.tron, spec.exclude || []);
-  if (!files.length) throw new Error(`no tron files under ${spec.tron.join(', ')}`);
+  const files = localFiles(spec.local, spec.exclude || []);
+  if (!files.length) throw new Error(`no local files under ${spec.local.join(', ')}`);
   const { files: upstreamCount, corpus, texts } = upstreamCorpus(source, spec.upstream);
   const violations = [];
   if (spec.protocol) {
-    const tronText = files.map((rel) => fs.readFileSync(path.join(PACKAGE_ROOT, rel), 'utf8')).join('\n');
-    const missing = missingProtocol(spec.protocol, texts, tronText);
+    const localText = files.map((rel) => fs.readFileSync(path.join(PACKAGE_ROOT, rel), 'utf8')).join('\n');
+    const missing = missingProtocol(spec.protocol, texts, localText);
     if (missing.length) violations.push(`protocol dropped by the rewrite: ${missing.join(', ')}`);
   }
   for (const rel of files) {
@@ -187,6 +187,6 @@ function main() {
 try {
   main();
 } catch (err) {
-  process.stderr.write(`[upstream-originality] ERROR: ${err.message}\n`);
+  process.stderr.write(`[pege:originality] ERROR: ${err.message}\n`);
   process.exit(1);
 }

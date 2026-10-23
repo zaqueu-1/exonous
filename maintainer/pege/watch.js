@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// upstream/watch.js — MAINTAINER ONLY: report upstream changes relevant to what this package interprets
-// Usage: npm run upstream:watch [-- <id>...] [-- --accept <id> [--ref <sha>]] [-- --json]
-// Reads pins from upstream/sources.json; writes reports to upstream/reports/<date>-<id>.md
+// maintainer/pege/watch.js — MAINTAINER ONLY: report upstream changes relevant to what this package interprets
+// Usage: npm run pege:watch [-- <id>...] [-- --accept <id> [--ref <sha>]] [-- --json]
+// Reads pins from maintainer/pege/sources.json; writes reports to maintainer/pege/reports/<date>-<id>.md
 
 'use strict';
 
@@ -11,11 +11,11 @@ const { UPSTREAM_ROOT, loadSources, getSource, setSourceRef } = require('./lib/s
 const { git, mirror } = require('./lib/git');
 
 const REPORTS_ROOT = path.join(UPSTREAM_ROOT, 'reports');
-const PACKAGE_ROOT = path.resolve(UPSTREAM_ROOT, '..');
+const PACKAGE_ROOT = path.resolve(UPSTREAM_ROOT, '..', '..');
 const LOG_LIMIT = 60;
 
 function log(msg) {
-  process.stdout.write(`[upstream-watch] ${msg}\n`);
+  process.stdout.write(`[pege:watch] ${msg}\n`);
 }
 
 function parseArgs(argv) {
@@ -101,7 +101,7 @@ function renderReport(source, result) {
     `- Repo: ${result.repo}`,
     `- Pinned: \`${result.pinned}\``,
     `- Latest: \`${result.latest}\``,
-    `- Tron artifact: ${source.tron}`,
+    `- Local artifact: ${source.local}`,
     `- Status: ${source.status} (phase ${source.phase})`,
     '',
     `## Relevant changes (${result.changes.length})`,
@@ -118,9 +118,9 @@ function renderReport(source, result) {
     '',
     '## Porting',
     '',
-    'Interpret relevant changes into the tron artifact in our own words (no verbatim copies), then run:',
+    'Interpret relevant changes into the local artifact in our own words (no verbatim copies), then run:',
     '',
-    `\`npm run upstream:watch -- --accept ${source.id} --ref ${result.latest}\``,
+    `\`npm run pege:watch -- --accept ${source.id} --ref ${result.latest}\``,
     '',
   ];
   return lines.join('\n');
@@ -175,6 +175,6 @@ function main() {
 try {
   main();
 } catch (err) {
-  process.stderr.write(`[upstream-watch] ERROR: ${err.message}\n`);
+  process.stderr.write(`[pege:watch] ERROR: ${err.message}\n`);
   process.exit(1);
 }
