@@ -44,7 +44,10 @@ function install({ home, dryRun, log, execPath }) {
   const patterns = path.join(paths.cursorDir(), 'skills', 'ui-patterns');
   if (!dryRun) fs.rmSync(patterns, { recursive: true, force: true });
   home.copyTree(path.join(ASSETS, 'skills', 'ui-patterns'), patterns);
-  const gate = { beforeShellExecution: [{ command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter cursor') }] };
+  const gate = {
+    beforeShellExecution: [{ command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter cursor') }],
+    sessionStart: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter cursor') }],
+  };
   mergeOwned(hooksFile(), { format: 'cursor', entries: gate, ownedMarker: OWNED_MARKER, dryRun, log });
   mergeOwned(hooksFile(), { format: 'cursor', entries: uiDesignEntries(), ownedMarker: '/.agents/skills/ui-design/scripts/', dryRun, log });
 }
@@ -78,6 +81,7 @@ function doctor() {
   const row = (name, ok, status = '') => ({ name: `Cursor: ${name}`, ok, status, fix: 'exonous install' });
   return [
     row('gate hook (commit, push, pr)', hooks.includes('pyle.cjs') && hooks.includes('auto --adapter cursor')),
+    row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter cursor')),
     row('nomos.mdc rule', fs.existsSync(path.join(paths.cursorDir(), 'rules', 'nomos.mdc'))),
     row('skills', COMMANDS.every((c) => fs.existsSync(path.join(paths.cursorDir(), 'skills', c, 'SKILL.md')))),
     { name: 'Cursor: User Rules', ok: true, status: USER_RULES, fix: USER_RULES },

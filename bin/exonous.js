@@ -10,7 +10,7 @@ Usage: exonous <command> [flags]
 
   install       wire every detected tool (Claude Code, Cursor) machine-wide; safe to re-run
                 --dry-run  --quiet  --permissions  --tools a,b  --all  --skip-tool x
-  update        move to the latest release                 --check: report only
+  update        move to the latest release of this major   --check: report only  --major: cross a major
   doctor        check every piece and say how to fix what is missing
   uninstall     remove exonous from this machine            --yes  --dry-run
   doctor/gate   exonous gate --selftest <tool>: pipe a fake git commit to the registered hook, expect a deny
@@ -114,40 +114,24 @@ function runValidatePr() {
   return 0;
 }
 
-function writeNote(root, text) {
-  const dir = path.join(root, '.claude', '.exonous');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'note'), `${text}\n`);
-}
-
 function runUpdate() {
-  const { update } = require('../src/update');
-  const root = process.env.INIT_CWD || process.cwd();
-  const background = flag('background');
+  const { update, describe } = require('../src/update');
+  const options = { check: flag('check'), background: flag('background'), major: flag('major') };
   let result;
   try {
-    result = update({ root, check: flag('check') });
+    result = update(options);
   } catch (err) {
-    const message = `exonous update failed: ${err.message} — run \`npx exonous update\` to retry`;
-    if (background) writeNote(root, message);
-    else console.error(message);
+    if (options.background) return 0;
+    console.error(`exonous update: ${err.message.split('\n')[0]}`);
     return 1;
   }
-  const messages = {
-    absent: 'exonous is not a dependency of this project.',
-    pinned: `pinned to "${result.from}" — not updating (remove the #ref to follow releases).`,
-    'unknown-source': 'dependency source is not a git URL — update it with your package manager.',
-    'no-release': 'no vX.Y.Z release tag found on the remote.',
-    current: `up to date (v${result.to}).`,
-    available: `update available: v${result.from || '?'} → v${result.to}.`,
-    updated: result.from === result.to ? `exonous now follows release v${result.to}.` : `exonous updated v${result.from || '?'} → v${result.to}.`,
-    busy: 'another update is running.',
-  };
-  if (background) {
-    if (result.status === 'updated') writeNote(root, messages.updated);
-  } else {
-    console.log(messages[result.status]);
+  if (options.background) return 0;
+  const message = describe(result, options);
+  if (['failed', 'error'].includes(result.status)) {
+    console.error(message);
+    return 1;
   }
+  console.log(message);
   return 0;
 }
 

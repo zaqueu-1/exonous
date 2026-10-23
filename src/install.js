@@ -56,7 +56,7 @@ function install({
   });
   step(emit, 'biblos', () => ensureBiblos({ dryRun }));
   step(emit, 'design stack', () => installDesignStack(home, { dryRun, log: emit }));
-  if (!step(emit, 'runtime', () => installRuntime(home))) home.ledger.complete = false;
+  if (!step(emit, 'runtime', () => installRuntime(home, { dryRun }))) home.ledger.complete = false;
   const ctx = { home, dryRun, log: emit, execPath, permissions, external, detected };
   for (const adapter of selected) {
     if (!step(emit, adapter.id, () => adapter.install(ctx))) home.ledger.complete = false;

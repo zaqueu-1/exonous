@@ -27,6 +27,7 @@ function hookEntries(execPath) {
       { matcher: 'Bash', hooks: [{ type: 'command', command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter claude') }] },
       { matcher: 'Read', hooks: [{ type: 'command', command: hookCommand(execPath, 'lib/metron.cjs') }] },
     ],
+    SessionStart: [{ hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter claude') }] }],
   };
 }
 
@@ -98,6 +99,7 @@ function doctor() {
     : 0;
   return [
     row('gate hook (commit, push, pr)', hooks.includes('pyle.cjs') && hooks.includes('auto --adapter claude') && fs.existsSync(path.join(paths.exoDir(), 'hooks', 'pyle.cjs'))),
+    row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter claude')),
     row('nomos rule', fs.existsSync(path.join(paths.claudeDir(), 'rules', 'nomos.md'))),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(paths.claudeDir(), 'commands', `${c}.md`)))),
     row('skills', Object.keys(HOME_SKILLS).every((s) => fs.existsSync(path.join(paths.claudeDir(), 'skills', s, 'SKILL.md')))),

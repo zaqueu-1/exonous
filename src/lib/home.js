@@ -85,6 +85,11 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
     }
   }
 
+  /** Records a file another step writes (e.g. a staged dir swap) so prune keeps it. */
+  function track(destAbs, content, { tool = 'shared' } = {}) {
+    ledger.current[homeRel(destAbs)] = { hash: sha256(content), tool };
+  }
+
   function sync(srcAbs, destAbs, options) {
     let content;
     try {
@@ -245,7 +250,7 @@ function createHome({ dryRun = false, log, previous, previousSections }) {
     fs.writeFileSync(ledgerPath(), `${JSON.stringify(data, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   }
 
-  return { write, sync, copyTree, link, remove, section, removeSection, prune, ledger };
+  return { write, track, sync, copyTree, link, remove, section, removeSection, prune, ledger };
 }
 
 module.exports = { createHome, readLedger, readLedgerFile, homeRel, sha256, ledgerPath, contained };

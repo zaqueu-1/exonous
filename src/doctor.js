@@ -7,6 +7,7 @@ const paths = require('./lib/paths');
 const { select, selftest } = require('./adapters');
 const { DESIGN_SKILLS, packageVersion, readInstallInfo } = require('./lib/runtime');
 const { LEFTOVERS } = require('./legacy/bridge');
+const selfupdate = require('../assets/machine/hooks/lib/selfupdate.cjs');
 
 const FIX = 'exonous install';
 
@@ -21,6 +22,22 @@ function readJson(file) {
 function hasMcp(key) {
   return [path.join(paths.claudeDir(), '.mcp.json'), path.join(paths.home(), '.claude.json')]
     .some((file) => Boolean(readJson(file)?.mcpServers?.[key]));
+}
+
+function updateChecks() {
+  const moved = selfupdate.tagWarning();
+  const last = selfupdate.lastCheck();
+  const off = selfupdate.optedOut();
+  const age = last === null ? 'never checked' : `last check ${Math.round((Date.now() - last) / 3600000)} h ago`;
+  return [
+    { name: 'self-update', ok: true, status: off ? `off (${off})` : age, fix: 'exonous update' },
+    {
+      name: 'release tag unchanged since install',
+      ok: !moved,
+      status: moved ? `v${moved.version} now points to ${moved.actual.slice(0, 12)}, installed from ${moved.expected.slice(0, 12)}` : '',
+      fix: 'check the tag on github.com/zaqueu-1/exonous before trusting it, then exonous update',
+    },
+  ];
 }
 
 function sharedChecks() {
@@ -48,7 +65,7 @@ function doctor() {
     const result = selftest(a);
     return { name: `${a.id}: gate self-test`, ok: result.ok, status: result.detail, fix: 'exonous install' };
   });
-  const checks = [...sharedChecks(), ...tools.flatMap((a) => a.doctor({})), ...gates];
+  const checks = [...sharedChecks(), ...updateChecks(), ...tools.flatMap((a) => a.doctor({})), ...gates];
   console.log(`exonous v${packageVersion()} — ${tools.map((a) => a.id).join(', ') || 'no supported tool detected'}\n`);
   for (const check of checks) {
     const detail = check.status ? ` (${check.status})` : '';

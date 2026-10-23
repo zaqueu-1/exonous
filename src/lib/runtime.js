@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const paths = require('./paths');
 const { renderRules, VARIANTS } = require('./render-rules');
+const { RELEASE_REF } = require('./release');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 const ASSETS = path.join(PACKAGE_ROOT, 'assets');
@@ -86,13 +87,59 @@ function listFiles(dir, base = dir) {
   });
 }
 
-function installRuntime(home) {
+/** Copies rels into a temp sibling of dest, then swaps it in; dest is untouched until the copy is complete. */
+function stageDir(srcRoot, rels, dest) {
+  const tag = `${process.pid}-${Date.now()}`;
+  const stage = `${dest}.staging-${tag}`;
+  const old = `${dest}.old-${tag}`;
+  try {
+    for (const rel of rels) {
+      fs.mkdirSync(path.dirname(path.join(stage, rel)), { recursive: true });
+      fs.copyFileSync(path.join(srcRoot, rel), path.join(stage, rel));
+    }
+  } catch (err) {
+    fs.rmSync(stage, { recursive: true, force: true });
+    throw err;
+  }
+  const hadDest = fs.existsSync(dest);
+  if (hadDest) fs.renameSync(dest, old);
+  try {
+    fs.renameSync(stage, dest);
+  } catch (err) {
+    if (hadDest) fs.renameSync(old, dest);
+    fs.rmSync(stage, { recursive: true, force: true });
+    throw err;
+  }
+  fs.rmSync(old, { recursive: true, force: true });
+}
+
+function installRuntime(home, { dryRun = false } = {}) {
   const hooks = path.join(ASSETS, 'machine', 'hooks');
-  for (const rel of listFiles(hooks)) home.sync(path.join(hooks, rel), path.join(paths.exoDir(), 'hooks', rel));
+  const dest = path.join(paths.exoDir(), 'hooks');
+  const rels = listFiles(hooks);
+  for (const rel of rels) home.track(path.join(dest, rel), fs.readFileSync(path.join(hooks, rel)));
+  if (!dryRun) stageDir(hooks, rels, dest);
   home.sync(path.join(ASSETS, 'machine', 'PR-TEMPLATE.md'), path.join(paths.exoDir(), 'PR-TEMPLATE.md'));
   for (const variant of VARIANTS) {
     home.write(path.join(paths.exoDir(), 'rules', variant === 'full' ? 'nomos.md' : `nomos.${variant}.md`), renderRules(variant));
   }
+}
+
+/** Absolute path of the pm binary on PATH, recorded so self-update does not depend on a later PATH. */
+function findOnPath(name, env = process.env) {
+  const exts = process.platform === 'win32' ? ['.cmd', '.exe', ''] : [''];
+  for (const dir of String(env.PATH || '').split(path.delimiter)) {
+    if (!dir || !path.isAbsolute(dir)) continue;
+    for (const ext of exts) {
+      const file = path.join(dir, `${name}${ext}`);
+      try {
+        if (fs.statSync(file).isFile()) return file;
+      } catch {
+        // not here
+      }
+    }
+  }
+  return null;
 }
 
 const installInfoPath = () => path.join(paths.exoDir(), 'install.json');
@@ -109,11 +156,16 @@ function readInstallInfo() {
 function writeInstallInfo({ tools, dryRun = false }) {
   const previous = readInstallInfo() || {};
   const version = packageVersion();
+  // A release ref holds only for the version it installed; any other ref is the user's pin.
+  const keepRef = previous.ref && (previous.version === version || !RELEASE_REF.test(previous.ref));
+  const pm = paths.detectPm(process.env, PACKAGE_ROOT);
   const info = {
     version,
-    pm: paths.detectPm(process.env, PACKAGE_ROOT),
+    pm,
+    pmPath: findOnPath(pm),
     packageRoot: PACKAGE_ROOT,
     source: SOURCE,
+    ...(keepRef ? { ref: previous.ref } : {}),
     tagSha: previous.version === version ? previous.tagSha ?? null : null,
     installedAt: previous.version === version && previous.installedAt ? previous.installedAt : new Date().toISOString(),
     tools: Object.fromEntries(Object.entries(tools).map(([id, t]) => [id, { tier: t.tier, version }])),
@@ -129,6 +181,6 @@ function writeInstallInfo({ tools, dryRun = false }) {
 
 module.exports = {
   PACKAGE_ROOT, ASSETS, SOURCE, OWNED_MARKER, COMMANDS, HOME_SKILLS, DESIGN_SKILLS,
-  packageVersion, uiDesignBin, shellQuote, hookCommand, listFiles, installRuntime, readInstallInfo, writeInstallInfo,
+  packageVersion, uiDesignBin, shellQuote, hookCommand, listFiles, stageDir, installRuntime, readInstallInfo, writeInstallInfo,
   isolatedHome, devCheckout, guardTarget, postinstallDecision,
 };

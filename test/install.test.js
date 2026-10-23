@@ -10,7 +10,7 @@ const { execFileSync } = require('child_process');
 const { test, beforeEach, afterEach } = require('node:test');
 const { install } = require('../src/install');
 const { readLedger } = require('../src/lib/home');
-const { readInstallInfo, SOURCE } = require('../src/lib/runtime');
+const { readInstallInfo, SOURCE, stageDir } = require('../src/lib/runtime');
 
 let saved;
 beforeEach(() => {
@@ -56,6 +56,68 @@ test('runtime: hooks, template, rule variants and install.json land in ~/.claude
   assert.deepStrictEqual(Object.keys(info.tools), ['claude']);
   assert.ok(info.tools.claude.tier && info.tools.claude.version);
   assert.strictEqual(readLedger()['.claude/exonous/hooks/pyle.cjs'].tool, 'shared');
+});
+
+test('kairos is registered once per tool at session start, beside foreign session hooks', () => {
+  fs.mkdirSync(home('.cursor'));
+  const foreign = { hooks: [{ type: 'command', command: 'my-session-banner' }] };
+  fs.writeFileSync(home('.claude', 'settings.json'), JSON.stringify({ hooks: { SessionStart: [foreign] } }));
+  fs.writeFileSync(home('.cursor', 'hooks.json'), JSON.stringify({ version: 1, hooks: { sessionStart: [{ command: 'my-cursor-start' }] } }));
+  run({ execPath: '/opt/node 20/bin/node' });
+  run({ execPath: '/opt/node 20/bin/node' });
+  const kairos = `"${home('.claude', 'exonous', 'hooks', 'kairos.cjs')}"`;
+  const claude = JSON.parse(fs.readFileSync(home('.claude', 'settings.json'), 'utf8')).hooks.SessionStart;
+  assert.deepStrictEqual(claude[0], foreign);
+  assert.deepStrictEqual(claude.filter((e) => JSON.stringify(e).includes('kairos')), [{ hooks: [{ type: 'command', command: `"/opt/node 20/bin/node" ${kairos} --adapter claude` }] }]);
+  const cursor = JSON.parse(fs.readFileSync(home('.cursor', 'hooks.json'), 'utf8')).hooks.sessionStart;
+  assert.deepStrictEqual(cursor[0], { command: 'my-cursor-start' });
+  assert.deepStrictEqual(cursor.filter((e) => e.command.includes('kairos')), [{ command: `"/opt/node 20/bin/node" ${kairos} --adapter cursor` }]);
+});
+
+test('a reinstall of the same version keeps the recorded tag; a non-tag pin survives any version', () => {
+  run();
+  const file = home('.claude', 'exonous', 'install.json');
+  fs.writeFileSync(file, JSON.stringify({ ...readInstallInfo(), ref: 'v9.9.9', tagSha: 'b'.repeat(40) }));
+  run();
+  assert.deepStrictEqual([readInstallInfo().ref, readInstallInfo().tagSha], ['v9.9.9', 'b'.repeat(40)]);
+  fs.writeFileSync(file, JSON.stringify({ ...readInstallInfo(), version: '0.0.1', ref: 'v0.0.1' }));
+  run();
+  assert.deepStrictEqual([readInstallInfo().ref, readInstallInfo().tagSha], [undefined, null]);
+  fs.writeFileSync(file, JSON.stringify({ ...readInstallInfo(), version: '0.0.1', ref: 'main' }));
+  run();
+  assert.strictEqual(readInstallInfo().ref, 'main');
+});
+
+test('hooks are staged in a sibling dir and swapped in whole; a failed stage keeps the previous hooks', () => {
+  run();
+  const hooks = home('.claude', 'exonous', 'hooks');
+  fs.writeFileSync(path.join(hooks, 'dropped-by-release.cjs'), 'old');
+  run();
+  assert.ok(!fs.existsSync(path.join(hooks, 'dropped-by-release.cjs')), 'the whole dir is replaced');
+  assert.ok(fs.existsSync(path.join(hooks, 'kairos.cjs')));
+  assert.deepStrictEqual(fs.readdirSync(home('.claude', 'exonous')).filter((n) => /^hooks\./.test(n)), [], 'no staging leftovers');
+  const before = fs.readFileSync(path.join(hooks, 'pyle.cjs'), 'utf8');
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), 'stage-src-'));
+  fs.writeFileSync(path.join(src, 'pyle.cjs'), 'new');
+  assert.throws(() => stageDir(src, ['pyle.cjs', 'missing.cjs'], hooks));
+  assert.strictEqual(fs.readFileSync(path.join(hooks, 'pyle.cjs'), 'utf8'), before);
+  assert.deepStrictEqual(fs.readdirSync(home('.claude', 'exonous')).filter((n) => /^hooks\./.test(n)), []);
+});
+
+test('install.json records the pm binary found on PATH', () => {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-bin-'));
+  fs.writeFileSync(path.join(bin, 'npm'), '#!/bin/sh\n', { mode: 0o755 });
+  process.env.PATH = `${bin}${path.delimiter}${process.env.PATH}`;
+  const saved = process.env.npm_config_user_agent;
+  process.env.npm_config_user_agent = 'npm/10.0.0 node/v20';
+  try {
+    run();
+  } finally {
+    if (saved === undefined) delete process.env.npm_config_user_agent;
+    else process.env.npm_config_user_agent = saved;
+  }
+  assert.strictEqual(readInstallInfo().pm, 'npm');
+  assert.strictEqual(readInstallInfo().pmPath, path.join(bin, 'npm'));
 });
 
 test('a second install changes nothing on disk', () => {

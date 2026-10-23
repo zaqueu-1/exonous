@@ -27,6 +27,19 @@ function stateDir() {
   return path.join(exoDir(), 'state');
 }
 
+/** EXONOUS_HOME set and resolving somewhere other than the OS home. */
+function redirectedHome(env = process.env) {
+  if (!env.EXONOUS_HOME) return false;
+  try {
+    return fs.realpathSync(env.EXONOUS_HOME) !== fs.realpathSync(homedir());
+  } catch {
+    return true;
+  }
+}
+
+/** Test-only overrides (release source, pm shims) need EXONOUS_TEST=1 and a redirected home. */
+const testMode = (env = process.env) => env.EXONOUS_TEST === '1' && redirectedHome(env);
+
 /** Env for git calls in a repo under review: repo config must not run commands (fsmonitor, hooks). */
 function gitEnv(base = process.env) {
   const env = { ...base, GIT_TERMINAL_PROMPT: '0' };
@@ -65,4 +78,4 @@ function repoKey(cwd) {
   return crypto.createHash('sha1').update(repoRoot(cwd)).digest('hex');
 }
 
-module.exports = { home, claudeDir, cursorDir, exoDir, stateDir, gitEnv, gitOut, repoRoot, repoKey };
+module.exports = { home, claudeDir, cursorDir, exoDir, stateDir, redirectedHome, testMode, gitEnv, gitOut, repoRoot, repoKey };
