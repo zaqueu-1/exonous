@@ -231,18 +231,19 @@ function uninstallViaCli(ids, marketplaces, { dryRun, log }) {
 function cleanPluginSettings(ids, marketplaces, { dryRun, log }) {
   editSettings((settings) => {
     const changes = [];
-    for (const id of ids) {
-      if (settings.enabledPlugins && id in settings.enabledPlugins) {
-        delete settings.enabledPlugins[id];
-        changes.push(`removed enabledPlugins["${id}"]`);
+    const drop = (key, names, label) => {
+      const map = settings[key];
+      if (!map || typeof map !== 'object') return;
+      const hits = names.filter((n) => n in map);
+      for (const n of hits) {
+        delete map[n];
+        changes.push(`removed ${key}${label(n)}`);
       }
-    }
-    for (const name of marketplaces) {
-      if (settings.extraKnownMarketplaces && name in settings.extraKnownMarketplaces) {
-        delete settings.extraKnownMarketplaces[name];
-        changes.push(`removed extraKnownMarketplaces.${name}`);
-      }
-    }
+      // Registration created the container; once our entry leaves it empty, it goes too.
+      if (hits.length && !Object.keys(map).length) delete settings[key];
+    };
+    drop('enabledPlugins', ids, (id) => `["${id}"]`);
+    drop('extraKnownMarketplaces', marketplaces, (name) => `.${name}`);
     return changes;
   }, { dryRun, log });
 }
