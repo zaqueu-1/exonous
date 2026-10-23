@@ -8,11 +8,13 @@ const fs = require('fs');
 const path = require('path');
 const { test } = require('node:test');
 const { REPO_FILES, HOME_SKILLS, COMMANDS, DESIGN_SKILLS } = require('../src/setup');
+const { renderRules, VARIANTS } = require('../src/lib/render-rules');
 
 const ROOT = path.resolve(__dirname, '..');
 const ASSETS = path.join(ROOT, 'assets');
 const NOMOS_BUDGET = 4500;
 const COMMON_RULES_BUDGET = 4000;
+const MIN_RULES_BUDGET = 3072;
 const LEGACY_ZONES = ['src/legacy/', 'scripts/postinstall.js', 'maintainer/'];
 const LEGACY_PACKAGE = '@tron/claude-config';
 // The tron brand and the Greek skill names that English names replaced.
@@ -94,4 +96,14 @@ test('always-loaded context stays inside its byte budget', () => {
   const commonDir = path.join(ASSETS, 'techne', 'rules', 'common');
   const common = fs.readdirSync(commonDir).reduce((sum, f) => sum + fs.statSync(path.join(commonDir, f)).size, 0);
   assert.ok(common <= COMMON_RULES_BUDGET, `techne rules/common is ${common} B (budget ${COMMON_RULES_BUDGET})`);
+});
+
+test('every rules variant fits inside the source and min fits the Windsurf budget', () => {
+  const source = fs.statSync(path.join(ASSETS, 'rules', 'nomos.md')).size;
+  for (const variant of VARIANTS) {
+    const size = Buffer.byteLength(renderRules(variant));
+    assert.ok(size <= source, `${variant} is ${size} B, larger than nomos.md (${source} B)`);
+  }
+  const min = Buffer.byteLength(renderRules('min'));
+  assert.ok(min <= MIN_RULES_BUDGET, `min rules are ${min} B (budget ${MIN_RULES_BUDGET})`);
 });

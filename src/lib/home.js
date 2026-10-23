@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const paths = require('./paths');
+const markers = require('./writers/markers');
 
 const EXECUTABLE_EXTS = new Set(['', '.sh', '.cmd']);
 
@@ -20,19 +21,33 @@ function homeRel(abs) {
   return path.relative(paths.home(), abs).split(path.sep).join('/');
 }
 
-function readLedger(file = ledgerPath()) {
+function readLedgerFile(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8')).files || {};
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return null;
   }
 }
 
+function readLedger(file = ledgerPath()) {
+  const data = readLedgerFile(file);
+  return data ? data.files || {} : null;
+}
+
+const sectionKey = (entry) => `${entry.path}#${entry.marker}`;
+
 /**
- * @param {{ dryRun?: boolean, log: (msg: string) => void, previous?: Record<string, string> }} options
+ * @typedef {{ path: string, marker: 'html'|'hash', hash: string, tool?: string }} SectionEntry
+ * @param {{ dryRun?: boolean, log: (msg: string) => void, previous?: Record<string, string>, previousSections?: SectionEntry[] }} options
  */
-function createHome({ dryRun = false, log, previous }) {
-  const ledger = { previous: previous || readLedger() || {}, current: {}, complete: true };
+function createHome({ dryRun = false, log, previous, previousSections }) {
+  const ledger = {
+    previous: previous || readLedger() || {},
+    current: {},
+    previousSections: previousSections || readLedgerFile(ledgerPath())?.sections || [],
+    currentSections: [],
+    complete: true,
+  };
 
   function write(destAbs, content) {
     const rel = homeRel(destAbs);
@@ -131,12 +146,63 @@ function createHome({ dryRun = false, log, previous }) {
     return true;
   }
 
+  function section(destAbs, content, { style = 'html', tool } = {}) {
+    const rel = homeRel(destAbs);
+    let res;
+    try {
+      res = markers.upsertFile(destAbs, content, { style, dryRun, log });
+    } catch (err) {
+      ledger.complete = false;
+      log(`WARN: ~/${rel} section not synced: ${err.message}`);
+      return;
+    }
+    const entry = { path: rel, marker: style, hash: res.hash, ...(tool ? { tool } : {}) };
+    if (res.status !== 'malformed') {
+      ledger.currentSections.push(entry);
+      return;
+    }
+    // Unmanageable now, but still ours: keep the old entry so prune does not retire it.
+    const old = ledger.previousSections.find((e) => sectionKey(e) === sectionKey(entry));
+    if (old) ledger.currentSections.push(old);
+  }
+
+  /** @param {SectionEntry} entry */
+  function removeSection(entry) {
+    const abs = path.join(paths.home(), entry.path);
+    let text;
+    try {
+      text = fs.readFileSync(abs, 'utf8');
+    } catch {
+      return;
+    }
+    const body = markers.readSection(text, entry.marker);
+    if (body === null) return;
+    if (markers.hashSection(body) !== entry.hash) {
+      const bak = `${abs}.exonous-section.bak`;
+      if (dryRun) log(`DRY: would keep your edits to the exonous section of ~/${entry.path} as ~/${entry.path}.exonous-section.bak`);
+      else {
+        fs.writeFileSync(bak, body, 'utf8');
+        log(`kept your edits to the exonous section of ~/${entry.path} as ~/${entry.path}.exonous-section.bak`);
+      }
+    }
+    if (markers.removeFile(abs, { style: entry.marker, dryRun, log }).status === 'removed' && !dryRun) {
+      log(`retired exonous section from ~/${entry.path}`);
+    }
+  }
+
   // A partial run would make every unsynced file look retired, so the old ledger is kept instead.
-  function prune(version) {
+  function prune(version, { tools } = {}) {
+    const current = new Set(ledger.currentSections.map(sectionKey));
+    const retired = ledger.previousSections.filter((e) => !current.has(sectionKey(e)));
     if (!ledger.complete) {
       log('WARN: some files failed to sync — stale-file cleanup skipped until the next clean run');
       ledger.current = { ...ledger.previous, ...ledger.current };
+      ledger.currentSections.push(...retired);
     } else {
+      for (const entry of retired) {
+        if (tools && entry.tool && !tools.includes(entry.tool)) ledger.currentSections.push(entry);
+        else removeSection(entry);
+      }
       for (const [rel, hash] of Object.entries(ledger.previous)) {
         if (rel in ledger.current) continue;
         const target = path.join(paths.home(), rel);
@@ -150,10 +216,11 @@ function createHome({ dryRun = false, log, previous }) {
     }
     if (dryRun) return;
     fs.mkdirSync(paths.exoDir(), { recursive: true });
-    fs.writeFileSync(ledgerPath(), `${JSON.stringify({ version, files: ledger.current }, null, 2)}\n`, 'utf8');
+    const data = { version, files: ledger.current, sections: ledger.currentSections };
+    fs.writeFileSync(ledgerPath(), `${JSON.stringify(data, null, 2)}\n`, 'utf8');
   }
 
-  return { write, sync, copyTree, link, remove, prune, ledger };
+  return { write, sync, copyTree, link, remove, section, removeSection, prune, ledger };
 }
 
 module.exports = { createHome, readLedger, homeRel, sha256, ledgerPath };
