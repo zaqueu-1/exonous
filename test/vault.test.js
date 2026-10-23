@@ -214,9 +214,10 @@ test('config round-trip keeps foreign keys and honors EXONOUS_HOME', () => {
 
 test('readConfig and resolve read through the injected fs', () => {
   const fsx = memfs({ '/exo/config.json': JSON.stringify({ vault: '/v/injected', other: 1 }) });
-  assert.deepStrictEqual(vault.readConfig({ exoDir: '/exo', fs: fsx }), { vault: '/v/injected', other: 1 });
-  assert.strictEqual(vault.resolve({ exoDir: '/exo', fs: fsx, env: {} }), '/v/injected');
-  assert.deepStrictEqual(vault.readConfig({ exoDir: '/nowhere', fs: fsx }), {});
+  const linux = { platform: 'linux', fs: fsx };
+  assert.deepStrictEqual(vault.readConfig({ ...linux, exoDir: '/exo' }), { vault: '/v/injected', other: 1 });
+  assert.strictEqual(vault.resolve({ ...linux, exoDir: '/exo', env: {} }), '/v/injected');
+  assert.deepStrictEqual(vault.readConfig({ ...linux, exoDir: '/nowhere' }), {});
 });
 
 test('writeConfig creates the exonous dir', () => {

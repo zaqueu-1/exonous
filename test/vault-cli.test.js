@@ -17,7 +17,9 @@ const { uninstall } = require('../src/uninstall');
 fx.useFixtureHome();
 
 const BIN = path.join(__dirname, '..', 'bin', 'exonous.js');
-const LINUX = { platform: 'linux' };
+// Windows paths are relative under linux rules, so win32 keeps its own platform and registry location.
+const NATIVE = process.platform === 'win32' ? { platform: 'win32' } : { platform: 'linux' };
+const REGISTRY_DIR = process.platform === 'win32' ? ['AppData', 'Roaming', 'obsidian'] : ['.config', 'obsidian'];
 const config = () => fx.home('.claude', 'exonous', 'config.json');
 
 function cli(args, env = {}) {
@@ -31,7 +33,7 @@ function registry(vaults) {
     fs.mkdirSync(v.path, { recursive: true });
     entries[`id${i}`] = v;
   });
-  fx.write({ vaults: entries }, '.config', 'obsidian', 'obsidian.json');
+  fx.write({ vaults: entries }, ...REGISTRY_DIR, 'obsidian.json');
 }
 
 function snapshot(dir) {
@@ -52,7 +54,7 @@ test('install picks the open Obsidian vault from the target home registry and re
   const open = fx.home('notes', 'open');
   registry([{ path: recent, ts: 200 }, { path: open, ts: 100, open: true }]);
   const logs = [];
-  const result = installVault({ log: (m) => logs.push(m), ctx: LINUX });
+  const result = installVault({ log: (m) => logs.push(m), ctx: NATIVE });
   assert.deepStrictEqual(result, { path: open, kind: 'obsidian' });
   assert.strictEqual(JSON.parse(fs.readFileSync(config(), 'utf8')).vault, open);
   assert.deepStrictEqual(logs, [`vault: ${open} (obsidian)`]);
@@ -61,13 +63,13 @@ test('install picks the open Obsidian vault from the target home registry and re
 test('install without Obsidian creates the fallback vault once and keeps it after', () => {
   fs.mkdirSync(fx.home('Documents'));
   const fallback = fx.home('Documents', 'exonous-vault');
-  assert.deepStrictEqual(installVault({ ctx: LINUX }), { path: fallback, kind: 'fallback' });
+  assert.deepStrictEqual(installVault({ ctx: NATIVE }), { path: fallback, kind: 'fallback' });
   assert.ok(fs.existsSync(path.join(fallback, 'README.md')));
   assert.ok(fs.existsSync(path.join(fallback, '.obsidian')));
   fs.writeFileSync(path.join(fallback, 'README.md'), 'mine\n');
   registry([{ path: fx.home('later'), ts: 1, open: true }]);
   const logs = [];
-  assert.deepStrictEqual(installVault({ log: (m) => logs.push(m), ctx: LINUX }), { path: fallback, kind: 'existing' });
+  assert.deepStrictEqual(installVault({ log: (m) => logs.push(m), ctx: NATIVE }), { path: fallback, kind: 'existing' });
   assert.deepStrictEqual(logs, [`vault: ${fallback} (existing)`]);
   assert.strictEqual(fs.readFileSync(path.join(fallback, 'README.md'), 'utf8'), 'mine\n');
 });
@@ -78,7 +80,7 @@ test('a configured vault whose folder is missing (unmounted drive) is kept with 
   fx.write(saved, '.claude', 'exonous', 'config.json');
   registry([{ path: fx.home('other'), ts: 1, open: true }]);
   const logs = [];
-  assert.deepStrictEqual(installVault({ log: (m) => logs.push(m), ctx: LINUX }), { path: gone, kind: 'missing' });
+  assert.deepStrictEqual(installVault({ log: (m) => logs.push(m), ctx: NATIVE }), { path: gone, kind: 'missing' });
   assert.deepStrictEqual(logs, [`WARN: vault: ${gone} not found — keeping config; fix with \`exonous vault detect\` / \`exonous vault set <path>\``]);
   assert.strictEqual(fs.readFileSync(config(), 'utf8'), saved);
   assert.ok(!fs.existsSync(gone));
@@ -91,13 +93,13 @@ test('a skill-config vault is kept as is', () => {
   const legacy = fx.home('legacy-vault');
   fs.mkdirSync(legacy);
   fx.write({ vault: legacy }, '.claude', 'skills', 'project-memory', 'config.json');
-  assert.deepStrictEqual(installVault({ ctx: LINUX }), { path: legacy, kind: 'existing' });
+  assert.deepStrictEqual(installVault({ ctx: NATIVE }), { path: legacy, kind: 'existing' });
   assert.ok(!fs.existsSync(config()), 'nothing written');
 });
 
 test('dry run reports the choice and writes nothing', () => {
   const logs = [];
-  const result = installVault({ dryRun: true, log: (m) => logs.push(m), ctx: LINUX });
+  const result = installVault({ dryRun: true, log: (m) => logs.push(m), ctx: NATIVE });
   assert.strictEqual(result.kind, 'fallback');
   assert.ok(!fs.existsSync(result.path));
   assert.ok(!fs.existsSync(config()));
@@ -108,17 +110,17 @@ test('an explicit choice wins over detection', () => {
   registry([{ path: fx.home('a'), ts: 1, open: true }]);
   const picked = fx.home('b');
   fs.mkdirSync(picked);
-  assert.deepStrictEqual(installVault({ choice: picked, ctx: LINUX }), { path: picked, kind: 'obsidian' });
+  assert.deepStrictEqual(installVault({ choice: picked, ctx: NATIVE }), { path: picked, kind: 'obsidian' });
 });
 
 test('on a TTY with several vaults the user picks one', async () => {
   registry([{ path: fx.home('one'), ts: 2 }, { path: fx.home('two'), ts: 1 }]);
   const asked = [];
-  const picked = await promptVault({ ctx: LINUX, isTTY: true, ask: async (q) => { asked.push(q); return '2'; } });
+  const picked = await promptVault({ ctx: NATIVE, isTTY: true, ask: async (q) => { asked.push(q); return '2'; } });
   assert.strictEqual(picked, fx.home('two'));
   assert.strictEqual(asked.length, 1);
-  installVault({ choice: picked, ctx: LINUX });
-  assert.strictEqual(await promptVault({ ctx: LINUX, isTTY: true, ask: async () => assert.fail('configured: no prompt') }), null);
+  installVault({ choice: picked, ctx: NATIVE });
+  assert.strictEqual(await promptVault({ ctx: NATIVE, isTTY: true, ask: async () => assert.fail('configured: no prompt') }), null);
 });
 
 test('a malformed config.json is a warning: install goes on and the file is left alone', () => {

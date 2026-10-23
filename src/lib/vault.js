@@ -209,7 +209,7 @@ async function choose(candidates, { isTTY = Boolean(process.stdin.isTTY), ask = 
   return Number.isInteger(pick) && pick >= 1 && pick <= list.length ? list[pick - 1] : list[0];
 }
 
-const configFile = (c) => path.join(c.exoDir, 'config.json');
+const configFile = (c) => pathOf(c).join(c.exoDir, 'config.json');
 
 /** Unified machine config; `{}` when absent, throws on malformed JSON. */
 function readConfig(ctx) {
