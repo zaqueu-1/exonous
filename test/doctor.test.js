@@ -7,7 +7,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const { test } = require('node:test');
 const fx = require('./helpers/adapter-fixture');
 
@@ -98,8 +98,23 @@ test('a repo-mode install in the current directory points to exonous migrate', (
   cli(['install', '--quiet']);
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'v2repo-')));
   fs.writeFileSync(path.join(repo, 'package.json'), '{"devDependencies":{"exonous":"github:zaqueu-1/exonous#v2.0.0"}}\n');
+  assert.ok(!/repo-mode install in/.test(cli(['doctor'], { cwd: repo }).out), 'not a git repo yet');
+  execFileSync('git', ['init', '-q', repo], { env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
   const { out } = cli(['doctor'], { cwd: repo });
   assert.match(out, new RegExp(`✗ repo-mode install in ${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(out, /fix: run `exonous migrate` here/);
   assert.ok(!/repo-mode install in/.test(cli(['doctor'], { cwd: os.tmpdir() }).out));
+});
+
+test('the home is never a repo: doctor stays quiet there and migrate refuses it', () => {
+  fs.mkdirSync(fx.home('.claude'));
+  cli(['install', '--quiet']);
+  const home = fx.home();
+  const rules = path.join(home, '.claude', 'rules', 'exonous');
+  const before = fs.readdirSync(rules).length;
+  execFileSync('git', ['init', '-q', home], { env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+  assert.ok(!/repo-mode install in/.test(cli(['doctor'], { cwd: home }).out));
+  const res = cli(['migrate', '--repo', home]);
+  assert.match(res.out, /home directory \(or above it\), not a repo/);
+  assert.strictEqual(fs.readdirSync(rules).length, before);
 });

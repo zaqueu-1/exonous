@@ -96,8 +96,24 @@ function isScopeFile(file) {
   return Boolean(data) && typeof data === 'object' && !Array.isArray(data) && Object.keys(data).every((k) => SCOPE_KEYS.includes(k)) && Array.isArray(data.folders);
 }
 
+// The machine install writes the same relative paths into the home (e.g. .claude/rules/exonous), so the home is never a repo.
+function isHomeOrAbove(root) {
+  const real = (p) => {
+    try {
+      return fs.realpathSync.native(p);
+    } catch {
+      return null;
+    }
+  };
+  const target = real(root);
+  if (!target) return false;
+  const prefix = target.endsWith(path.sep) ? target : target + path.sep;
+  return [paths.home(), require('os').homedir()].map(real).some((home) => home && (home === target || home.startsWith(prefix)));
+}
+
 /** True when the repo still carries anything a repo-mode install wrote. */
 function hasRepoInstall(root, manifest) {
+  if (isHomeOrAbove(root)) return false;
   if (packageDeps(root).length) return true;
   return [...Object.keys(manifest.files).filter((k) => !k.startsWith('git-hooks:')), ...SCOPE_FILES].some((rel) => fs.existsSync(path.join(root, rel)));
 }
@@ -393,6 +409,11 @@ function migrateRepo({ root, manifest = loadManifest(), env = process.env, log =
   if (!root || !fs.existsSync(root)) return summary;
   // The repo itself may be reached through a symlink (or /tmp → /private/tmp); only what lies below it is checked.
   root = fs.realpathSync(root);
+  if (isHomeOrAbove(root)) {
+    const reason = `${root} is your home directory (or above it), not a repo — run \`exonous migrate\` inside the repo`;
+    log(reason);
+    return { ...summary, status: 'refused', reason };
+  }
   if (!hasRepoInstall(root, manifest)) return summary;
   const lifecycle = Boolean(env.npm_lifecycle_event);
   const saved = process.env;
