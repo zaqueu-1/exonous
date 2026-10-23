@@ -74,7 +74,7 @@ test('doctor shows the last check and flags a moved release tag', { skip }, () =
 });
 
 test('every status has a message', () => {
-  for (const status of ['not-installed', 'pinned', 'no-release', 'current', 'available', 'updated', 'busy', 'isolated', 'disabled', 'failed', 'error']) {
+  for (const status of ['not-installed', 'pinned', 'no-release', 'current', 'available', 'updated', 'busy', 'isolated', 'not-owner', 'disabled', 'failed', 'error']) {
     assert.ok(describe({ status, from: '2.1.0', to: '2.2.0' }), status);
   }
 });

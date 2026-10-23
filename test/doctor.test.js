@@ -65,6 +65,15 @@ test('a hook script edited after install is flagged against the ledger', () => {
   assert.match(cli(['doctor']).out, /✗ hook scripts match the install \(1 changed: hooks\/pyle\.cjs\)/);
 });
 
+test('files under ~/.claude/exonous owned by another uid are listed with the chown fix', () => {
+  fs.mkdirSync(fx.home('.claude'));
+  cli(['install', '--quiet']);
+  assert.match(cli(['doctor']).out, /✓ files in ~\/\.claude\/exonous owned by you/);
+  const { out } = cli(['doctor'], { env: { EXONOUS_TEST: '1', EXONOUS_TEST_UID: String(process.getuid() + 1) } });
+  assert.match(out, /✗ files in ~\/\.claude\/exonous owned by you \(\d+ not: \., /);
+  assert.match(out, /fix: sudo chown -R "\$\(id -un\)" ~\/\.claude\/exonous/);
+});
+
 test('no tracked hook entries is a warning to reinstall', () => {
   fs.mkdirSync(fx.home('.claude'));
   cli(['install', '--quiet']);

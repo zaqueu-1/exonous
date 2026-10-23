@@ -111,6 +111,22 @@ test('concurrent consumers: exactly one wins the token', async () => {
   assert.strictEqual(results.filter((r) => r.ok).length, 1);
 });
 
+test('minting refuses when the exonous dir belongs to another uid (no root-owned token files)', () => {
+  const dir = repo();
+  token.mint('commit', dir);
+  const saved = { t: process.env.EXONOUS_TEST, u: process.env.EXONOUS_TEST_UID };
+  process.env.EXONOUS_TEST = '1';
+  process.env.EXONOUS_TEST_UID = String(process.getuid() + 1);
+  try {
+    assert.throws(() => token.mint('commit', dir), /owned by uid \d+.*sudo chown/);
+  } finally {
+    for (const [k, v] of [['EXONOUS_TEST', saved.t], ['EXONOUS_TEST_UID', saved.u]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
 test('verify and consume can check explicit source shas', () => {
   const dir = repo();
   git(dir, 'commit', '-q', '--no-gpg-sign', '-m', 'b');

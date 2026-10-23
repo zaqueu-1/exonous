@@ -129,3 +129,16 @@ test('always exits 0, even when the home is broken', { skip }, () => {
   assert.strictEqual(res.status, 0);
   assert.strictEqual(kairos(fx, ['--run'], { EXONOUS_HOME: file, EXONOUS_RELEASE_SOURCE: 'file:///nope' }).status, 0);
 });
+
+test('kairos under a uid that does not own the exonous dir prints nothing and writes nothing', { skip }, async () => {
+  const fx = fixture();
+  fx.put('note', 'exonous updated v2.1.0 → v2.2.0 (restart to load new hooks)\n');
+  const res = kairos(fx, ['--adapter', 'claude'], { EXONOUS_TEST_UID: String(process.getuid() + 1) });
+  assert.strictEqual(res.status, 0);
+  assert.strictEqual(res.stdout, '');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(!fs.existsSync(path.join(fx.state, 'last-check')));
+  assert.notStrictEqual(fx.note(), '');
+  assert.deepStrictEqual(fx.pmCalls(), []);
+});
+

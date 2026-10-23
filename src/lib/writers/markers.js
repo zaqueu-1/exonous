@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { foreignOwner } = require('../paths');
 
 const VERSION = 2;
 const STYLES = {
@@ -93,6 +94,9 @@ function writeAtomic(file, text) {
   } catch {
     // new file
   }
+  // Replacing another uid's file would hand it to us (root, usually) and lock its owner out.
+  const owner = foreignOwner(fs.existsSync(target) ? target : path.dirname(target));
+  if (owner !== null) throw new Error(`${target} is owned by uid ${owner}, not you — run exonous as that user, or fix it with sudo chown -R "$(id -un)" ~/.claude/exonous`);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const tmp = `${target}.exonous-${process.pid}-${crypto.randomBytes(4).toString('hex')}.tmp`;
   fs.writeFileSync(tmp, text, { encoding: 'utf8', flag: 'wx', mode: mode ?? 0o666 });
