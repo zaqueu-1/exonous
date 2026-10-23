@@ -25,6 +25,7 @@ function startUpdate(selfupdate, adapter) {
 
 function main() {
   const selfupdate = require('./lib/selfupdate.cjs');
+  if (selfupdate.notOwner()) return;
   const adapter = (arg('--adapter') || 'claude').replace(/[^\w-]/g, '');
   if (process.argv.includes('--run')) {
     selfupdate.run({ background: true });

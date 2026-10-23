@@ -108,9 +108,36 @@ function changedHooks() {
     .map(([rel]) => rel.replace('.claude/exonous/', ''));
 }
 
+/** Files under ~/.claude/exonous another uid owns (a root session wrote them); the current user cannot update them. */
+function foreignFiles() {
+  const walk = (dir) => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    return entries.flatMap((e) => {
+      const full = path.join(dir, e.name);
+      const mine = paths.foreignOwner(full) === null;
+      const below = e.isDirectory() && !e.isSymbolicLink() ? walk(full) : [];
+      return mine ? below : [path.relative(paths.exoDir(), full), ...below];
+    });
+  };
+  const top = paths.foreignOwner(paths.exoDir()) === null ? [] : ['.'];
+  return [...top, ...walk(paths.exoDir())];
+}
+
 function machineChecks(cwd) {
   const info = readInstallInfo();
   const rows = [];
+  const foreign = foreignFiles();
+  rows.push({
+    name: 'files in ~/.claude/exonous owned by you',
+    ok: !foreign.length,
+    status: foreign.length ? `${foreign.length} not: ${foreign.slice(0, 5).join(', ')}${foreign.length > 5 ? ', …' : ''}` : '',
+    fix: 'sudo chown -R "$(id -un)" ~/.claude/exonous',
+  });
   const failed = readInstallError();
   if (failed) rows.push({ name: 'last install finished', ok: false, status: `${failed.text} (${failed.at}); details in ~/.claude/exonous/state/install.log`, fix: FIX });
   if (info) {

@@ -8,7 +8,7 @@ const readline = require('readline');
 const { createHome, readLedgerFile, ledgerPath, contained } = require('./lib/home');
 const { stripOwned } = require('./lib/settings');
 const { removePlugins, PLUGIN_ID, MARKETPLACE } = require('./lib/techne');
-const { DESIGN_SKILLS, HOME_SKILLS, PACKAGE_ROOT, sharedSkillDir, isolatedHome, guardTarget, readInstallInfo } = require('./lib/runtime');
+const { DESIGN_SKILLS, HOME_SKILLS, PACKAGE_ROOT, sharedSkillDir, isolatedHome, guardTarget, readInstallInfo, assertOwner } = require('./lib/runtime');
 const { ADAPTERS } = require('./adapters');
 
 // Runtime pieces exonous ships into ~/.claude/exonous; everything else there belongs to the user.
@@ -115,6 +115,7 @@ function removePackage(info, { log }) {
 /** @param {{ yes?: boolean, dryRun?: boolean, realHome?: boolean, verbose?: boolean, removePackage?: boolean, log?: (msg: string) => void }} [options] */
 async function uninstall({ yes = false, dryRun = false, realHome = false, verbose = false, removePackage: dropPackage = false, log = defaultLog } = {}) {
   guardTarget({ action: 'uninstall', dryRun, realHome, log });
+  if (!dryRun) assertOwner('uninstall');
   if (!yes && !dryRun && !(await confirm(`Remove exonous from ${paths.home()}? [y/N] `))) {
     log('nothing removed');
     return 1;

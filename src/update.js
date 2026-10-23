@@ -22,6 +22,7 @@ function describe(result, { check = false } = {}) {
     available: `update available: v${result.from} → v${result.to}.${check ? ' Run `exonous update` to apply it.' : ''}${major}`,
     updated: `exonous updated v${result.from} → v${result.to} (restart your tools to load the new hooks).${result.warnings ? ' Install warned — see ~/.claude/exonous/state/update.log.' : ''}`,
     busy: 'another update is running.',
+    'not-owner': '~/.claude/exonous belongs to another user (e.g. a sudo session) — run exonous as its owner; nothing was changed.',
     isolated: `update to v${result.to} available, but EXONOUS_HOME points away from the real home — global installs are skipped.`,
     disabled: `automatic updates are off (${result.reason}).`,
     failed: `update to v${result.to} failed: ${result.error}`,

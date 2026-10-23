@@ -14,7 +14,6 @@ Everything a maintainer needs; the README is for users. Nothing in this file or 
 | `src/lib/` | `home` (ledger), `settings` (JSON hook/MCP merge), `writers/{markers,toml-block}`, `convert/`, `render-rules`, `runtime`, `paths`, `release`, `agents`, `atlas`, `biblos`, `techne` | yes |
 | `src/legacy/repo-migrate.js` + `v2-manifest.json` | repo-mode (v2.0.0 and `@tron/claude-config`) → machine install — **delete in v3.0.0** | yes |
 | `src/legacy/bridge.js` | tron → exonous home cleanup (`migrateHome`) — **lives one more release**, then delete | yes |
-| `scripts/postinstall.js` | best-effort `exonous install` for a global copy; repo migration for a copy inside `node_modules`; nothing in a dev checkout or CI | yes |
 | `assets/rules/nomos.md` | the only always-on rule (byte budget enforced); `render-rules` derives the `no-agents` and `min` variants | yes |
 | `assets/machine/` | what is copied to `~/.claude/exonous`: `hooks/` (`pyle.cjs`, `kairos.cjs`, `lib/*.cjs`, Node builtins only) and `PR-TEMPLATE.md`. Replaces the old `assets/repo/` | yes |
 | `assets/agents/` | the 12 `exo-*` agents, `roster.json`, `taxis.js` | yes |
@@ -35,7 +34,7 @@ Install and uninstall write into other tools' configs under the real home. Never
 - Redirect the home **on the same command line**, and turn updates off:
   `EXONOUS_HOME=$(mktemp -d) HOME=$(mktemp -d) EXONOUS_NO_UPDATE=1 node bin/exonous.js install --dry-run`
   `EXONOUS_HOME` moves everything exonous reads and writes; `HOME` also moves what child processes (`git`, package managers) read. With `EXONOUS_HOME` set, global package-manager calls, the `claude` CLI and the atlas engine install are skipped.
-- A dev checkout (a `.git` next to `package.json`) refuses `install` and `uninstall` against the real home. `--real-home` overrides the guard; use it only on purpose. `postinstall` does nothing in a dev checkout.
+- A dev checkout (a `.git` next to `package.json`) refuses `install` and `uninstall` against the real home. `--real-home` overrides the guard; use it only on purpose.
 - Tests and manual git runs use `GIT_CONFIG_GLOBAL=/dev/null` so your identity, hooks path and signing config do not leak in.
 - `EXONOUS_TEST=1` plus a redirected home unlocks the test seams (`EXONOUS_RELEASE_SOURCE=file://…` for a local bare release repo, `EXONOUS_UPDATE_TEST_PM=1` for PATH shims of npm/pnpm/bun). Never set them outside a test.
 - `config.json`, `agent-roles` and the skills' own config files are the user's: install and uninstall never overwrite or delete them.
@@ -107,7 +106,8 @@ Regenerate `src/legacy/v2-manifest.json` (`node maintainer/gen-v2-manifest.js`) 
 - an `exo-*` or `techne:*` name doesn't resolve;
 - a file install ships is missing;
 - a skill's `name:` differs from its folder;
-- the old brand shows up outside `src/legacy/`, `scripts/postinstall.js` and `maintainer/`;
+- the old brand shows up outside `src/legacy/` and `maintainer/`;
+- `package.json` gains an install lifecycle script (`preinstall`, `install`, `postinstall`, `prepare`, …): npm would then prepare a git install in a temp clone and run our code there, which breaks `npm i -g github:…`.
 - `nomos.md` grows past 4.5 KB, techne `rules/common` past 4 KB, any rules variant is larger than `nomos.md`, or the `min` variant passes 3 KB (Windsurf).
 
 Rules belong in skills or path-scoped rules, not in the core.
@@ -130,7 +130,7 @@ Shipped content is our own text; provenance lives only in `maintainer/pege/sourc
 `src/legacy/repo-migrate.js` and `v2-manifest.json` go in v3.0.0; `bridge.js` (`migrateHome`) lives one release longer than the repo migration is announced, then goes too.
 
 1. Delete `src/legacy/repo-migrate.js`, `src/legacy/v2-manifest.json` and `maintainer/gen-v2-manifest.js`; drop the `migrate` command and the `setup`-inside-`node_modules` branch from `bin/exonous.js`.
-2. In `scripts/postinstall.js` and `postinstallDecision` (`src/lib/runtime.js`), remove the `migrate` action.
+2. Remove `setupDecision` from `src/lib/runtime.js` (`setup` becomes a plain alias of `install`).
 3. In `src/doctor.js`, drop the repo-mode row from `machineChecks` and the leftovers check; in `src/install.js`, once `bridge.js` goes, remove the `legacy` import, its `migrateHome` call and `previous: legacy.previousLedger()`.
 4. Delete `src/legacy/bridge.js`, `workflow-engine.js` and their tests; in `test/consistency.test.js`, remove the `LEGACY_ZONES` entries and `LEGACY_PACKAGE`.
 5. The `/tron-flow` alias command files disappear from every machine on that release through the ledger.

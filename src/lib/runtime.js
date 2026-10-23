@@ -78,20 +78,31 @@ function guardTarget({ action, dryRun = false, realHome = false, log = () => {} 
   throw new Error(`refusing to ${action} the real home ${paths.home()} from a dev checkout (${PACKAGE_ROOT}); set EXONOUS_HOME to a test home, or pass --real-home if you mean it`);
 }
 
-/** @returns {{ action: 'install'|'skip'|'migrate', reason: string }} */
-function postinstallDecision(env, root = PACKAGE_ROOT) {
-  if (env.CI || env.CONTINUOUS_INTEGRATION) return { action: 'skip', reason: 'CI' };
-  if (devCheckout(root)) return { action: 'skip', reason: 'dev checkout — run `exonous install` with EXONOUS_HOME set to test' };
+/**
+ * `exonous setup` (what the v2.0.0 updater runs from <repo>/node_modules/exonous): migrate when this copy sits in a repo
+ * that depends on exonous, otherwise it is just `install`.
+ * @returns {'migrate'|'install'}
+ */
+function setupDecision(root = PACKAGE_ROOT) {
   let real = root;
   try {
     real = fs.realpathSync(root);
   } catch {
     // keep the given path
   }
-  const posix = real.split(path.sep).join('/');
-  if (env.npm_config_global === 'true' || /\/\.bun\/install\/global\/|\/pnpm\/global\//.test(posix)) return { action: 'install', reason: 'global install' };
-  if (posix.includes('/node_modules/')) return { action: 'migrate', reason: 'repo-mode install: moving it to the machine install' };
-  return { action: 'install', reason: 'standalone' };
+  const parts = real.split(path.sep);
+  const i = parts.indexOf('node_modules');
+  if (i <= 0) return 'install';
+  let pkg = null;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(parts.slice(0, i).join(path.sep) || path.sep, 'package.json'), 'utf8'));
+  } catch {
+    return 'install';
+  }
+  const declared = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  if (!['exonous', '@tron/claude-config'].some((name) => name in declared)) return 'install';
+  // pnpm, yarn and bun keep global packages under a package.json of their own; only a git work tree is a repo.
+  return (paths.gitOut(parts.slice(0, i).join(path.sep) || path.sep, ['rev-parse', '--is-inside-work-tree']) || '').trim() === 'true' ? 'migrate' : 'install';
 }
 
 function listFiles(dir, base = dir) {
@@ -187,6 +198,22 @@ function readInstallError() {
   }
 }
 
+/**
+ * Every writing command calls this first: root must not write into a home another uid owns, and nobody may write into an
+ * exonous dir another uid owns (a sudo session would leave files the user can no longer read or update).
+ */
+function assertOwner(action) {
+  if (paths.currentUid() === null) return;
+  if (paths.currentUid() === 0) {
+    const owner = paths.foreignOwner(paths.home());
+    if (owner !== null) throw new Error(`refusing to ${action} as root into ${paths.home()}, which is owned by uid ${owner} — run exonous as that user (without sudo)`);
+  }
+  for (const dir of [paths.exoDir(), paths.stateDir()]) {
+    const owner = paths.foreignOwner(dir);
+    if (owner !== null) throw new Error(`refusing to ${action}: ${dir} is owned by uid ${owner}, not you — run exonous as that user, or fix it with sudo chown -R "$(id -un)" ~/.claude/exonous`);
+  }
+}
+
 const installInfoPath = () => path.join(paths.exoDir(), 'install.json');
 
 function readInstallInfo() {
@@ -227,5 +254,5 @@ function writeInstallInfo({ tools, dryRun = false }) {
 module.exports = {
   PACKAGE_ROOT, ASSETS, SOURCE, OWNED_MARKER, COMMANDS, HOME_SKILLS, DESIGN_SKILLS, sharedSkillDir, foreignSkill,
   packageVersion, uiDesignBin, shellQuote, hookCommand, listFiles, stageDir, installRuntime, readInstallInfo, writeInstallInfo,
-  isolatedHome, devCheckout, guardTarget, postinstallDecision, INSTALL_ERROR, recordInstallError, clearInstallError, readInstallError,
+  isolatedHome, devCheckout, guardTarget, setupDecision, assertOwner, INSTALL_ERROR, recordInstallError, clearInstallError, readInstallError,
 };

@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { exoDir, stateDir, redirectedHome, testMode } = require('./paths.cjs');
+const { exoDir, stateDir, redirectedHome, testMode, foreignOwner } = require('./paths.cjs');
 const { RELEASE_REF, compareVersions, listReleases } = require('./release.cjs');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,6 +27,8 @@ const NOTES = {
 };
 
 const statePath = (name) => path.join(stateDir(), name);
+// Another uid (root in a user's session) owns the exonous dir: read nothing, write nothing.
+const notOwner = () => foreignOwner(exoDir()) !== null || foreignOwner(stateDir()) !== null;
 const parts = (version) => String(version).split('.').map(Number);
 
 function readJson(file) {
@@ -95,6 +97,7 @@ function due({ now = Date.now() } = {}) {
 }
 
 function markChecked({ now = Date.now() } = {}) {
+  if (notOwner()) return false;
   writeState('last-check', `${now}\n`);
   const t = now / 1000;
   fs.utimesSync(statePath('last-check'), t, t);
@@ -119,6 +122,7 @@ function writeNote(text) {
 
 /** Note left for the next session start, removed once read. */
 function takeNote() {
+  if (notOwner()) return '';
   try {
     const note = cleanNote(fs.readFileSync(statePath('note'), 'utf8'));
     fs.rmSync(statePath('note'), { force: true });
@@ -292,6 +296,7 @@ function announceMajor(version) {
  * @param {{ background?: boolean, major?: boolean }} [options] background: honor opt-outs and report through state/note.
  */
 function run({ background = false, major = false } = {}) {
+  if (notOwner()) return { status: 'not-owner' };
   if (background) {
     const reason = optedOut();
     if (reason) return { status: 'disabled', reason };
@@ -332,6 +337,6 @@ function run({ background = false, major = false } = {}) {
 }
 
 module.exports = {
-  DAY_MS, LOCK_STALE_MS, SOURCE, optedOut, due, lastCheck, markChecked, cleanNote, takeNote, tagWarning, check, run, spec,
+  DAY_MS, LOCK_STALE_MS, SOURCE, notOwner, optedOut, due, lastCheck, markChecked, cleanNote, takeNote, tagWarning, check, run, spec,
   pmCommand, pmRun, globalRoot, globalAllowed, verifyPackage,
 };

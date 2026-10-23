@@ -40,6 +40,24 @@ function redirectedHome(env = process.env) {
 /** Test-only overrides (release source, pm shims) need EXONOUS_TEST=1 and a redirected home. */
 const testMode = (env = process.env) => env.EXONOUS_TEST === '1' && redirectedHome(env);
 
+/** Effective uid (tests may stub it in test mode); null where uids do not exist (Windows). */
+function currentUid(env = process.env) {
+  if (testMode(env) && /^\d+$/.test(env.EXONOUS_TEST_UID || '')) return Number(env.EXONOUS_TEST_UID);
+  return typeof process.getuid === 'function' ? process.getuid() : null;
+}
+
+/** Uid owning target when it differs from ours, else null: a root session must not leave root-owned files in a user's home. */
+function foreignOwner(target, env = process.env) {
+  const uid = currentUid(env);
+  if (uid === null) return null;
+  try {
+    const owner = fs.statSync(target).uid;
+    return owner === uid ? null : owner;
+  } catch {
+    return null;
+  }
+}
+
 /** Env for git calls in a repo under review: repo config must not run commands (fsmonitor, hooks). */
 function gitEnv(base = process.env) {
   const env = { ...base, GIT_TERMINAL_PROMPT: '0' };
@@ -78,4 +96,4 @@ function repoKey(cwd) {
   return crypto.createHash('sha1').update(repoRoot(cwd)).digest('hex');
 }
 
-module.exports = { home, claudeDir, cursorDir, exoDir, stateDir, redirectedHome, testMode, gitEnv, gitOut, repoRoot, repoKey };
+module.exports = { home, claudeDir, cursorDir, exoDir, stateDir, redirectedHome, testMode, currentUid, foreignOwner, gitEnv, gitOut, repoRoot, repoKey };

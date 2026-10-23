@@ -4,7 +4,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { stateDir, repoKey, gitOut } = require('./paths.cjs');
+const { exoDir, stateDir, repoKey, gitOut, foreignOwner } = require('./paths.cjs');
 
 const TTL_MS = 15 * 60 * 1000;
 const BINDINGS = {
@@ -32,6 +32,10 @@ const unique = () => `${process.pid}.${crypto.randomBytes(6).toString('hex')}`;
 /** @param {{ now?: number }} [options] */
 function mint(kind, cwd, { now = Date.now() } = {}) {
   bindingArgs(kind);
+  for (const dir of [exoDir(), stateDir()]) {
+    const owner = foreignOwner(dir);
+    if (owner !== null) throw new Error(`${dir} is owned by uid ${owner}, not you — run exonous as that user, or fix it with sudo chown -R "$(id -un)" ~/.claude/exonous`);
+  }
   const file = tokenFile(kind, cwd);
   const sha = currentSha(kind, cwd);
   if (!sha) throw new Error(`git could not read the ${kind === 'commit' ? 'staged tree' : 'HEAD commit'} in ${cwd}`);

@@ -247,3 +247,16 @@ test('without install.json there is nothing to update', { skip }, () => {
   fs.rmSync(path.join(fx.exo, 'install.json'));
   assert.strictEqual(runLib(fx, 'run', { background: true }).status, 'not-installed');
 });
+
+test('a process whose uid does not own ~/.claude/exonous (e.g. root in a user session) writes nothing', { skip }, () => {
+  const fx = fixture();
+  fx.put('note', 'keep me\n');
+  const env = { EXONOUS_TEST_UID: String(process.getuid() + 1) };
+  assert.strictEqual(runLib(fx, 'run', { background: true }, env).status, 'not-owner');
+  assert.strictEqual(runLib(fx, 'markChecked', {}, env), false);
+  assert.strictEqual(runLib(fx, 'takeNote', {}, env), '');
+  assert.ok(!fs.existsSync(path.join(fx.state, 'last-check')));
+  assert.strictEqual(fx.note(), 'keep me');
+  assert.deepStrictEqual(fx.pmCalls(), []);
+});
+

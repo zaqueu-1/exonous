@@ -17,7 +17,7 @@ const ASSETS = path.join(ROOT, 'assets');
 const NOMOS_BUDGET = 4500;
 const COMMON_RULES_BUDGET = 4000;
 const MIN_RULES_BUDGET = 3072;
-const LEGACY_ZONES = ['src/legacy/', 'scripts/postinstall.js', 'maintainer/'];
+const LEGACY_ZONES = ['src/legacy/', 'maintainer/'];
 const LEGACY_PACKAGE = '@tron/claude-config';
 // The tron brand and the Greek skill names that English names replaced.
 const OLD_BRAND = /(?<![a-z])(?:tron|hodos|mneme|graphe|pinax|elenchos|phylax|kallos|kinesis|physis|eikon|kanon)(?![a-z])/i;
@@ -39,7 +39,7 @@ function walk(dir, out = []) {
 }
 
 const isText = (f) => !read(f).includes('\0');
-const shipped = ['bin', 'src', 'assets', 'scripts'].flatMap((d) => walk(path.join(ROOT, d)))
+const shipped = ['bin', 'src', 'assets'].flatMap((d) => walk(path.join(ROOT, d)))
   .filter((f) => !VENDORED.test(rel(f)) && isText(f));
 const docs = shipped.filter((f) => /\.(md|mdc)$/.test(f));
 const roster = JSON.parse(read(path.join(ASSETS, 'agents', 'roster.json')));
@@ -112,3 +112,13 @@ test('every rules variant fits inside the source and min fits the Windsurf budge
   const min = Buffer.byteLength(renderRules('min'));
   assert.ok(min <= MIN_RULES_BUDGET, `min rules are ${min} B (budget ${MIN_RULES_BUDGET})`);
 });
+
+test('package.json has no install lifecycle scripts, so a git install never runs our code in a temp clone', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  for (const name of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack', 'postpack', 'build']) {
+    assert.ok(!(pkg.scripts && name in pkg.scripts), `scripts.${name} must not exist`);
+  }
+  assert.ok(!pkg.files.some((f) => /postinstall/.test(f)));
+  assert.ok(!fs.existsSync(path.join(__dirname, '..', 'scripts', 'postinstall.js')));
+});
+

@@ -13,11 +13,11 @@ Exonous is installed once per machine and active in every project of every suppo
 Needs Node 18+ and git.
 
 ```bash
-npm i -g github:zaqueu-1/exonous#v2.1.0     # or: pnpm add -g … / bun add -g …
+npm i -g github:zaqueu-1/exonous#v2.1.1     # or: pnpm add -g … / bun add -g …
 exonous install
 ```
 
-`exonous install` is the contract and is safe to re-run. The package's `postinstall` runs it too, but only as a best effort (pnpm and bun may skip it).
+`exonous install` is the contract and is safe to re-run. Installing the package runs none of its code (no install scripts), so always run `exonous install` after it.
 
 Then point project-memory at your vault once:
 

@@ -169,7 +169,7 @@ test('install never writes into the repository it runs from', () => {
 
 // ── M3 revision: uninstall safety ────────────────────────────────────────────
 const { uninstall } = require('../src/uninstall');
-const { guardTarget, postinstallDecision } = require('../src/lib/runtime');
+const { guardTarget, setupDecision } = require('../src/lib/runtime');
 
 function foreignHome() {
   const files = {
@@ -248,18 +248,33 @@ test('a dev checkout refuses to touch the real home unless asked', () => {
   }
 });
 
-test('postinstall: CI skips, a repo node_modules copy migrates, global and explicit installs run', () => {
+test('setup migrates only a copy inside a git repo that depends on exonous; every other copy installs', () => {
+  const { execFileSync } = require('child_process');
+  const gitInit = (dir) => execFileSync('git', ['init', '-q'], { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' } });
   const real = fs.mkdtempSync(path.join(os.tmpdir(), 'pkg-'));
   const inRepo = path.join(real, 'app', 'node_modules', 'exonous');
   fs.mkdirSync(inRepo, { recursive: true });
-  assert.strictEqual(postinstallDecision({ CI: '1' }, inRepo).action, 'skip');
-  assert.strictEqual(postinstallDecision({ CONTINUOUS_INTEGRATION: 'true' }, inRepo).action, 'skip');
-  assert.strictEqual(postinstallDecision({}, inRepo).action, 'migrate');
-  assert.strictEqual(postinstallDecision({ npm_config_global: 'true' }, inRepo).action, 'install');
+  fs.writeFileSync(path.join(real, 'app', 'package.json'), '{"devDependencies":{"exonous":"github:zaqueu-1/exonous#v2.0.0"}}');
+  assert.strictEqual(setupDecision(inRepo), 'install', 'a package.json with no git work tree (pnpm/yarn global dir) installs');
+  gitInit(path.join(real, 'app'));
+  assert.strictEqual(setupDecision(inRepo), 'migrate');
+  const legacy = path.join(real, 'old', 'node_modules', '@tron', 'claude-config');
+  fs.mkdirSync(legacy, { recursive: true });
+  fs.writeFileSync(path.join(real, 'old', 'package.json'), '{"devDependencies":{"@tron/claude-config":"github:x/y"}}');
+  gitInit(path.join(real, 'old'));
+  assert.strictEqual(setupDecision(legacy), 'migrate');
+  const pnpmGlobal = path.join(real, 'pnpm-global', '5', 'node_modules', 'exonous');
+  fs.mkdirSync(pnpmGlobal, { recursive: true });
+  fs.writeFileSync(path.join(real, 'pnpm-global', '5', 'package.json'), '{"dependencies":{"exonous":"github:zaqueu-1/exonous"}}');
+  assert.strictEqual(setupDecision(pnpmGlobal), 'install');
+  const npmGlobal = path.join(real, 'prefix', 'lib', 'node_modules', 'exonous');
+  fs.mkdirSync(npmGlobal, { recursive: true });
+  assert.strictEqual(setupDecision(npmGlobal), 'install');
   const bunGlobal = path.join(real, '.bun', 'install', 'global', 'node_modules', 'exonous');
   fs.mkdirSync(bunGlobal, { recursive: true });
-  assert.strictEqual(postinstallDecision({}, bunGlobal).action, 'install');
-  assert.strictEqual(postinstallDecision({}, path.join(__dirname, '..')).action, 'skip', 'dev checkout');
+  fs.writeFileSync(path.join(real, '.bun', 'install', 'global', 'package.json'), '{"dependencies":{"exonous":"github:zaqueu-1/exonous"}}');
+  assert.strictEqual(setupDecision(bunGlobal), 'install');
+  assert.strictEqual(setupDecision(path.join(__dirname, '..')), 'install');
 });
 
 test('a CLI install into a fixture home with every tool dir never touches os.homedir(); doctor self-tests each gate', () => {
@@ -443,3 +458,20 @@ test('a personal file that clashes with one already in the shared dir keeps the 
   assert.strictEqual(fs.readFileSync(home('.agents', 'skills', 'doc', 'notes.md'), 'utf8'), 'shared\n');
   assert.ok(logs.some((m) => /WARN: ~\/\.claude\/skills\/doc\/notes\.md also exists in ~\/\.agents\/skills\/doc/.test(m)), logs.join('\n'));
 });
+
+test('install refuses to run as root into a home root does not own', { skip: process.platform === 'win32' }, () => {
+  const saved = { t: process.env.EXONOUS_TEST, u: process.env.EXONOUS_TEST_UID };
+  process.env.EXONOUS_TEST = '1';
+  process.env.EXONOUS_TEST_UID = '0';
+  try {
+    if (fs.statSync(process.env.EXONOUS_HOME).uid === 0) return;
+    assert.throws(() => run(), /refusing to install as root into .* owned by uid \d+/);
+    assert.ok(!fs.existsSync(home('.claude', 'exonous')));
+  } finally {
+    for (const [k, v] of [['EXONOUS_TEST', saved.t], ['EXONOUS_TEST_UID', saved.u]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
