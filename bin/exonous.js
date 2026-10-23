@@ -37,22 +37,16 @@ const list = (name) => (value(name) ? value(name).split(',').map((s) => s.trim()
 const arg = (i) => process.argv[3 + i];
 const hooksLib = (name) => require(path.join(__dirname, '..', 'assets', 'machine', 'hooks', 'lib', name));
 
-// A copy inside a repo's node_modules is a repo-mode install (v2.0.0 updater or an older postinstall): migrate it.
+// A copy inside a repo's node_modules is a repo-mode install (the v2.0.0 updater runs `setup` there): migrate it.
 function runRepoMigration(root, trigger = 'cli') {
   const result = require('../src/legacy/repo-migrate').migrateRepo({ root, trigger });
   if (result.status === 'nothing') console.log(`[exonous] no repo-mode install found in ${root}`);
-  return result.status === 'blocked' ? 1 : 0;
+  return ['blocked', 'refused'].includes(result.status) ? 1 : 0;
 }
 
 function runInstall() {
-  if (process.argv[2] === 'setup') {
-    const lifecycle = process.env.npm_lifecycle_event === 'postinstall';
-    const decision = require('../src/lib/runtime').postinstallDecision(process.env);
-    if (decision.action === 'migrate') return runRepoMigration(require('../src/legacy/repo-migrate').migrationRoot(path.join(__dirname, '..')), 'repo');
-    if (lifecycle && decision.action === 'skip') {
-      console.log(`[exonous] postinstall skipped: ${decision.reason}`);
-      return 0;
-    }
+  if (process.argv[2] === 'setup' && require('../src/lib/runtime').setupDecision() === 'migrate') {
+    return runRepoMigration(require('../src/legacy/repo-migrate').migrationRoot(path.join(__dirname, '..')), 'repo');
   }
   require('../src/install').install({
     dryRun: flag('dry-run'), quiet: flag('quiet'), permissions: flag('permissions'), tools: list('tools'), all: flag('all'),
@@ -101,6 +95,7 @@ function runTemplate() {
 }
 
 function runDraftPath() {
+  require('../src/lib/runtime').assertOwner('write a PR draft');
   const file = hooksLib('template.cjs').draftPath(process.cwd());
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   console.log(file);
@@ -129,6 +124,7 @@ function runUpdate() {
   const options = { check: flag('check'), background: flag('background'), major: flag('major') };
   let result;
   try {
+    if (!options.check && !options.background) require('../src/lib/runtime').assertOwner('update');
     result = update(options);
   } catch (err) {
     if (options.background) return 0;
@@ -137,7 +133,7 @@ function runUpdate() {
   }
   if (options.background) return 0;
   const message = describe(result, options);
-  if (['failed', 'error'].includes(result.status)) {
+  if (['failed', 'error', 'not-owner'].includes(result.status)) {
     console.error(message);
     return 1;
   }

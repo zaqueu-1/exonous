@@ -386,7 +386,7 @@ function notice({ tools, gated }, log) {
 
 /**
  * @param {{ root: string, manifest?: object, env?: NodeJS.ProcessEnv, log?: (m: string) => void, install?: () => { tools: string[] }, trigger?: 'repo'|'cli' }} options
- *   trigger 'repo' (setup/postinstall from a repo's node_modules) honors the opt-outs and announces what it did.
+ *   trigger 'repo' (`setup` from a repo's node_modules) honors the opt-outs and announces what it did.
  */
 function migrateRepo({ root, manifest = loadManifest(), env = process.env, log = (m) => process.stdout.write(`[exonous] ${m}\n`), install, trigger = 'cli' } = {}) {
   const summary = { status: 'nothing', removed: [], keptModified: [], stripped: [], skipped: [], notes: [], trackedRemoved: 0 };
@@ -398,6 +398,12 @@ function migrateRepo({ root, manifest = loadManifest(), env = process.env, log =
   const saved = process.env;
   process.env = env;
   try {
+    try {
+      require('../lib/runtime').assertOwner('migrate');
+    } catch (err) {
+      log(err.message);
+      return { ...summary, status: 'refused', reason: err.message };
+    }
     const off = trigger === 'repo' && optedOut(env);
     if (off) {
       log(`machine install skipped (${off}); to migrate by hand run \`exonous install\`, then \`exonous migrate\` in ${root}`);

@@ -368,6 +368,84 @@ test('gh pr create must run alone and with known options', () => {
   assert.strictEqual(run('pr', claude('cd . && gh pr create -F body.md', dir), env).code, 0);
 });
 
+test('ignored dirs and nested ignored files never count as gitleaks config drift', () => {
+  const fx = setup();
+  fs.writeFileSync(path.join(fx.dir, '.gitignore'), '.claude/\n.cursor/\ncache/\n*.log\n');
+  git(fx.dir, 'add', '.gitignore');
+  git(fx.dir, 'commit', '-q', '--no-gpg-sign', '-m', 'ignore');
+  for (const rel of ['.claude/settings.local.json', '.cursor/x/y.json', 'cache/deep/pack.bin', 'logs/run.log']) {
+    fs.mkdirSync(path.dirname(path.join(fx.dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(fx.dir, rel), 'x');
+  }
+  git(fx.dir, 'add', 'b.txt');
+  fx.mint('commit');
+  const res = run('commit', claude('git commit -m x', fx.dir), fx.env);
+  assert.strictEqual(res.code, 0, res.stderr);
+});
+
+test('an untracked, ignored or modified .gitleaks file blocks the commit, at the root or nested', () => {
+  const cases = [
+    ['untracked root', (dir) => fs.writeFileSync(path.join(dir, '.gitleaks.toml'), 'x')],
+    ['untracked nested', (dir) => {
+      fs.mkdirSync(path.join(dir, 'sub'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'sub', '.gitleaksignore'), 'abc:1\n');
+    }],
+    ['ignored nested inside an ignored dir', (dir) => {
+      fs.writeFileSync(path.join(dir, '.gitignore'), 'cache/\n');
+      fs.mkdirSync(path.join(dir, 'cache', 'deep'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'cache', 'deep', '.gitleaks.toml'), 'x');
+    }],
+    ['ignored root', (dir) => {
+      fs.writeFileSync(path.join(dir, '.gitignore'), '.gitleaks.toml\n');
+      fs.writeFileSync(path.join(dir, '.gitleaks.toml'), 'x');
+    }],
+  ];
+  cases.push(['renamed away from a tracked config', (dir) => {
+    fs.writeFileSync(path.join(dir, '.gitleaks.toml'), 'x');
+    git(dir, 'add', '.gitleaks.toml');
+    git(dir, 'commit', '-q', '--no-gpg-sign', '-m', 'cfg');
+    git(dir, 'mv', '.gitleaks.toml', 'renamed.toml');
+  }]);
+  for (const [name, make] of cases) {
+    const fx = setup();
+    make(fx.dir);
+    fx.mint('commit');
+    const res = run('commit', claude('git commit -m x', fx.dir), fx.env);
+    assert.strictEqual(res.code, 2, name);
+    assert.match(res.stderr, /\.gitleaks/, name);
+    assert.ok(!/cache\/[,)]|\.gitignore/.test(res.stderr.split('differs from HEAD')[1] || ''), `${name}: only .gitleaks paths are named`);
+  }
+});
+
+test('gitleaks config detection ignores case (case-insensitive file systems resolve .GITLEAKS.toml as the config)', () => {
+  const cases = [
+    ['untracked .GITLEAKS.toml', (dir) => fs.writeFileSync(path.join(dir, '.GITLEAKS.toml'), 'x')],
+    ['ignored nested .GitLeaksIgnore', (dir) => {
+      fs.writeFileSync(path.join(dir, '.gitignore'), 'cache/\n');
+      fs.mkdirSync(path.join(dir, 'cache'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'cache', '.GitLeaksIgnore'), 'abc:1\n');
+    }],
+    ['modified tracked .Gitleaks.toml', (dir) => {
+      fs.writeFileSync(path.join(dir, '.Gitleaks.toml'), 'x');
+      git(dir, 'add', '.Gitleaks.toml');
+      git(dir, 'commit', '-q', '--no-gpg-sign', '-m', 'cfg');
+      fs.appendFileSync(path.join(dir, '.Gitleaks.toml'), '[allowlist]\n');
+    }],
+  ];
+  for (const [name, make] of cases) {
+    const fx = setup();
+    make(fx.dir);
+    git(fx.dir, 'add', 'b.txt');
+    fx.mint('commit');
+    const res = run('commit', claude('git commit -m x', fx.dir), fx.env);
+    assert.strictEqual(res.code, 2, name);
+    assert.match(res.stderr, /\.gitleaks/i, name);
+  }
+  const src = fs.readFileSync(PYLE, 'utf8');
+  assert.match(src, /const GITLEAKS_SPEC = ':\(glob,icase\)\*\*\/\.gitleaks\*';/);
+  assert.match(src, /\/\^\\\.gitleaks\/i\.test/);
+});
+
 test('a changed gitleaks config or a failing gitleaks blocks the commit', () => {
   const fx = setup();
   fs.writeFileSync(path.join(fx.dir, '.gitleaks.toml'), '[extend]\nuseDefault = true\n');

@@ -124,9 +124,9 @@ test('gate --selftest runs the registered hook and expects a deny', () => {
   assert.match(broken.stdout, /not registered/);
 });
 
-test('setup run as a postinstall from a dev checkout does nothing', () => {
+test('setup outside a repo node_modules is an alias of install', () => {
   const { home, cli } = fixture();
-  const res = cli(['setup'], { env: { ...process.env, EXONOUS_HOME: home, npm_lifecycle_event: 'postinstall' } });
-  assert.strictEqual(res.status, 0);
-  assert.deepStrictEqual(fs.readdirSync(path.join(home, '.claude')), []);
+  const res = cli(['setup', '--quiet'], { env: { ...process.env, EXONOUS_HOME: home, EXONOUS_NO_UPDATE: '1' } });
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.ok(fs.existsSync(path.join(home, '.claude', 'exonous', 'hooks', 'pyle.cjs')));
 });
