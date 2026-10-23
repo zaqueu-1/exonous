@@ -21,6 +21,7 @@ Usage: exonous <command> [flags]
   template               print the PR template that applies here
   draft-path             print where to write this repo's PR body draft
   validate-pr <file>     check a PR body against the template
+  vault [show|detect|set <path> [--create]|graph]   where agents keep notes; graph writes .exonous/graph.html + graph.json
 
   setup is an alias of install. From a source checkout, install/uninstall need EXONOUS_HOME or --real-home.`;
 
@@ -44,14 +45,20 @@ function runRepoMigration(root, trigger = 'cli') {
   return ['blocked', 'refused'].includes(result.status) ? 1 : 0;
 }
 
-function runInstall() {
-  if (process.argv[2] === 'setup' && require('../src/lib/runtime').setupDecision() === 'migrate') {
+async function runInstall() {
+  const runtime = require('../src/lib/runtime');
+  if (process.argv[2] === 'setup' && runtime.setupDecision() === 'migrate') {
     return runRepoMigration(require('../src/legacy/repo-migrate').migrationRoot(path.join(__dirname, '..')), 'repo');
   }
-  require('../src/install').install({
+  const options = {
     dryRun: flag('dry-run'), quiet: flag('quiet'), permissions: flag('permissions'), tools: list('tools'), all: flag('all'),
-    skip: list('skip-tool') || [], realHome: flag('real-home'), rewriteJsonc: flag('rewrite-jsonc'),
-  });
+    skip: list('skip-tool') || [], realHome: flag('real-home'), rewriteJsonc: flag('rewrite-jsonc'), vault: true, vaultChoice: null,
+  };
+  if (process.stdin.isTTY && !options.quiet && !options.dryRun) {
+    runtime.guardTarget({ action: 'install', realHome: options.realHome });
+    options.vaultChoice = await require('../src/vault-cli').promptVault({ isTTY: true });
+  }
+  require('../src/install').install(options);
   return 0;
 }
 
@@ -157,6 +164,7 @@ const commands = {
   template: runTemplate,
   'draft-path': runDraftPath,
   'validate-pr': runValidatePr,
+  vault: () => require('../src/vault-cli').vaultCommand(process.argv.slice(3)),
 };
 
 const command = process.argv[2];

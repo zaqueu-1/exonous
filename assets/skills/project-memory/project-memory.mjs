@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -28,7 +29,7 @@ const USAGE = `project-memory <command> [flags]
   update <id> [--title T] [--body B | --body-file F] [--status S] [--add-tag t] [--add-link L] [--add-evidence E] [--remove-evidence path]
   remove <id> [--force]          plans freely; adr/doc need --force
   validate                       evidence drift + unresolved links
-Common: --project <name> (default: repo name) · vault from PROJECT_MEMORY_VAULT or config.json { "vault": "<abs path>" }`
+Common: --project <name> (default: repo name) · vault from PROJECT_MEMORY_VAULT, else config.json { "vault": "<abs path>" } next to this script, else the exonous config (exonous vault)`
 
 function fail(message, code = 1) {
   process.stderr.write(`${message}\n`)
@@ -85,18 +86,26 @@ function repoContext(start) {
   }
 }
 
+function configVault(configPath) {
+  if (!existsSync(configPath)) return null
+  let vault
+  try {
+    vault = JSON.parse(readFileSync(configPath, 'utf8')).vault
+  } catch (err) {
+    fail(`Invalid ${configPath}: ${err.message}`, EXIT_NO_VAULT)
+  }
+  if (vault !== undefined && vault !== null && typeof vault !== 'string') fail(`Invalid ${configPath}: "vault" must be a string`, EXIT_NO_VAULT)
+  return vault || null
+}
+
 function vaultRoot() {
   if (process.env.PROJECT_MEMORY_VAULT) return resolve(process.env.PROJECT_MEMORY_VAULT)
-  const configPath = join(HERE, 'config.json')
-  if (existsSync(configPath)) {
-    try {
-      const vault = JSON.parse(readFileSync(configPath, 'utf8')).vault
-      if (vault) return resolve(vault)
-    } catch (err) {
-      fail(`Invalid ${configPath}: ${err.message}`, EXIT_NO_VAULT)
-    }
-  }
-  fail(`No vault configured. Set PROJECT_MEMORY_VAULT or create ${configPath} with { "vault": "<abs path>" }.`, EXIT_NO_VAULT)
+  // Per-skill override first, then the unified exonous config (same base as the hooks: EXONOUS_HOME or home).
+  const skillConfig = join(HERE, 'config.json')
+  const exonousConfig = join(process.env.EXONOUS_HOME || homedir(), '.claude', 'exonous', 'config.json')
+  const vault = configVault(skillConfig) || configVault(exonousConfig)
+  if (vault) return resolve(vault)
+  fail(`No vault configured. Run \`exonous vault detect\` (then \`exonous vault set <path>\`), or set PROJECT_MEMORY_VAULT.`, EXIT_NO_VAULT)
 }
 
 function context(flags) {

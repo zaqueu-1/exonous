@@ -13,7 +13,7 @@ Não confunda os dois vaults:
 
 | | Vault do projeto | Vault de sessões |
 |---|---|---|
-| Onde | dentro do repo (ex.: `docs/<Projeto>/`) | fora de qualquer repo, definido na skill `hermes` |
+| Onde | dentro do repo (ex.: `docs/<Projeto>/`) | fora de qualquer repo, definido por `exonous vault` (ou `sessionsVault` da skill `session-handoff`) |
 | O quê | regras, arquitetura, invariantes, armadilhas | o que aconteceu numa sessão |
 | Esta skill | **lê e edita** | **só lê** a última nota, como fonte |
 
@@ -92,6 +92,8 @@ Nada a mudar: diga isso em uma linha e cite o que foi conferido (quais notas, qu
 Alerte o usuário:
 
 > Este repositório não tem vault Obsidian de documentação. Sem ele, decisões e armadilhas descobertas nas sessões não ficam registradas junto do código.
+
+Este vault é o do projeto, não o vault central do exonous (`exonous vault`, que guarda sessões e memória): não use um no lugar do outro.
 
 Pergunte com AskUserQuestion se quer criar agora. Se não quiser, pare. Se quiser:
 

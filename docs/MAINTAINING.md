@@ -6,9 +6,11 @@ Everything a maintainer needs; the README is for users. Nothing in this file or 
 
 | Path | Holds | Shipped |
 |---|---|---|
-| `bin/exonous.js` | CLI: `install` (`setup` alias), `update`, `doctor`, `uninstall`, `migrate`, `token`, `workflow`, `template`, `draft-path`, `validate-pr`, `gate --selftest` | yes |
+| `bin/exonous.js` | CLI: `install` (`setup` alias), `update`, `doctor`, `uninstall`, `migrate`, `token`, `workflow`, `template`, `draft-path`, `validate-pr`, `gate --selftest`, `vault` | yes |
 | `src/install.js` | the installer: shared pieces, one pass per selected adapter, then ledger prune | yes |
 | `src/update.js` | thin wrapper over `assets/machine/hooks/lib/selfupdate.cjs`, shared by the CLI and the `kairos` hook | yes |
+| `src/vault-cli.js` | `exonous vault show/detect/set/graph` and the install vault step (keep a configured vault, else a detected Obsidian vault, else the fallback) | yes |
+| `src/lib/vault.js`, `vault-graph.js`, `vault-template.html` | Obsidian registry detection per platform (incl. WSL path translation), fallback vault, the `vault` key in `config.json`; wikilink graph and its offline HTML view | yes |
 | `src/doctor.js`, `src/uninstall.js` | coverage matrix and checks, adapter-aware removal | yes |
 | `src/adapters/` | one module per tool (`claude`, `cursor`, `gemini`, `codex`, `opencode`, `windsurf`, `copilot`, `cline`, `qwen`, `kiro`, `aider`), `index.js` registry and self-test, `shared.js` helpers | yes |
 | `src/lib/` | `home` (ledger), `settings` (JSON hook/MCP merge), `writers/{markers,toml-block}`, `convert/`, `render-rules`, `runtime`, `paths`, `release`, `agents`, `atlas`, `biblos`, `techne` | yes |
@@ -38,6 +40,8 @@ Install and uninstall write into other tools' configs under the real home. Never
 - Tests and manual git runs use `GIT_CONFIG_GLOBAL=/dev/null` so your identity, hooks path and signing config do not leak in.
 - `EXONOUS_TEST=1` plus a redirected home unlocks the test seams (`EXONOUS_RELEASE_SOURCE=file://…` for a local bare release repo, `EXONOUS_UPDATE_TEST_PM=1` for PATH shims of npm/pnpm/bun). Never set them outside a test.
 - `config.json`, `agent-roles` and the skills' own config files are the user's: install and uninstall never overwrite or delete them.
+
+- Platform and env are injected, never read ambiently: vault functions take `{ platform, env, fs, homedir, isWsl }`, and under `EXONOUS_HOME` the vault context points `APPDATA`, `XDG_CONFIG_HOME` and `USERPROFILE` at the temp home. A test must never read your real Obsidian registry.
 
 ## CI
 

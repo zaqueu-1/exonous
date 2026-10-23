@@ -21,7 +21,7 @@ Picking a kind: a choice with its rationale → `adr`; something still to be bui
 M="node ~/.claude/skills/project-memory/project-memory.mjs"
 ```
 
-Run inside the project repo (project = repo name; `--project <name>` elsewhere). Vault root comes from `PROJECT_MEMORY_VAULT` or `config.json` next to this file (`{ "vault": "<abs path>" }`); memories live in `<vault>/<project>/memory/<kind>/`. Missing config → ask the user for the vault path and write `config.json`.
+Run inside the project repo (project = repo name; `--project <name>` elsewhere). Vault root, first match wins: `PROJECT_MEMORY_VAULT` → `config.json` next to this file (`{ "vault": "<abs path>" }`, optional per-skill override) → the exonous vault (`~/.claude/exonous/config.json`, set by `exonous install` / `exonous vault set <path>`). Memories live in `<vault>/<project>/memory/<kind>/`. No vault (exit 3) → run `exonous vault detect`, confirm the path with the user, then `exonous vault set <path>`.
 
 ## Read — locate first
 

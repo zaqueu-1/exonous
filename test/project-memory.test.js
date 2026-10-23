@@ -97,3 +97,81 @@ test('missing vault fails with exit 3', () => {
   });
   assert.strictEqual(out.status, 3);
 });
+
+// Runs a copy of the CLI so the per-skill config.json lives in a temp dir, never in assets/.
+function isolated({ skill, unified, env = {} } = {}) {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'project-memory-cfg-'));
+  const dirs = {
+    skill: path.join(base, 'skill'),
+    exonous: path.join(base, 'exo-home', '.claude', 'exonous'),
+    unifiedVault: path.join(base, 'unified-vault'),
+    skillVault: path.join(base, 'skill-vault'),
+  };
+  for (const dir of Object.values(dirs)) fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(CLI, path.join(dirs.skill, 'project-memory.mjs'));
+  const write = (dir, content) => content !== undefined && fs.writeFileSync(path.join(dir, 'config.json'), content);
+  write(dirs.skill, skill && skill(dirs));
+  write(dirs.exonous, unified && unified(dirs));
+  const childEnv = { ...process.env, EXONOUS_HOME: path.join(base, 'exo-home'), HOME: path.join(base, 'home') };
+  delete childEnv.PROJECT_MEMORY_VAULT;
+  Object.assign(childEnv, env);
+  const run = (...args) => spawnSync('node', [path.join(dirs.skill, 'project-memory.mjs'), ...args], {
+    cwd: base,
+    encoding: 'utf8',
+    env: childEnv,
+  });
+  return { dirs, run };
+}
+
+const vaultJson = (key) => (dirs) => JSON.stringify({ vault: dirs[key] });
+const addProbe = (run) => run('add', 'doc', '--project', 'demo', '--title', 'Probe', '--body', 'b');
+const hasMemory = (vault) => fs.existsSync(path.join(vault, 'demo', 'memory', 'doc'));
+
+test('unified exonous config under EXONOUS_HOME supplies the vault', () => {
+  const { dirs, run } = isolated({ unified: vaultJson('unifiedVault') });
+  const out = addProbe(run);
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.ok(hasMemory(dirs.unifiedVault));
+});
+
+test('per-skill config.json overrides the unified vault', () => {
+  const { dirs, run } = isolated({ skill: vaultJson('skillVault'), unified: vaultJson('unifiedVault') });
+  const out = addProbe(run);
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.ok(hasMemory(dirs.skillVault));
+  assert.ok(!hasMemory(dirs.unifiedVault));
+});
+
+test('PROJECT_MEMORY_VAULT wins over both configs', () => {
+  const envVault = fs.mkdtempSync(path.join(os.tmpdir(), 'project-memory-env-'));
+  const { dirs, run } = isolated({
+    skill: vaultJson('skillVault'),
+    unified: vaultJson('unifiedVault'),
+    env: { PROJECT_MEMORY_VAULT: envVault },
+  });
+  const out = addProbe(run);
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.ok(hasMemory(envVault));
+  assert.ok(!hasMemory(dirs.skillVault) && !hasMemory(dirs.unifiedVault));
+});
+
+test('invalid JSON in the unified config fails loud', () => {
+  const { run } = isolated({ unified: () => '{ not json' });
+  const out = addProbe(run);
+  assert.strictEqual(out.status, 3);
+  assert.match(out.stderr, /Invalid .*config\.json/);
+});
+
+test('a non-string vault in the unified config fails loud', () => {
+  const { run } = isolated({ unified: () => '{ "vault": 42 }' });
+  const out = addProbe(run);
+  assert.strictEqual(out.status, 3);
+  assert.match(out.stderr, /"vault" must be a string/);
+});
+
+test('nothing configured exits 3 and points to exonous vault detect', () => {
+  const { run } = isolated();
+  const out = run('list', '--project', 'demo');
+  assert.strictEqual(out.status, 3);
+  assert.match(out.stderr, /exonous vault detect/);
+});

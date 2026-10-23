@@ -15,11 +15,11 @@ const { migrateRepo } = require('../src/legacy/repo-migrate');
 
 fx.useFixtureHome();
 // The real global git config may set core.hooksPath; fixture repos must never see it.
-process.env.GIT_CONFIG_GLOBAL = os.devNull;
+process.env.GIT_CONFIG_GLOBAL = '/dev/null';
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 
 const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
-const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 
 const SHIPPED = {
   'AGENTS.md': '# AGENTS (shipped)\n',

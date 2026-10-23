@@ -8,16 +8,24 @@ const { beforeEach, afterEach } = require('node:test');
 
 const KEYS = ['EXONOUS_HOME', 'HOME', 'PATH', 'EXONOUS_NO_UPDATE'];
 
+const GIT_DIR = (process.env.PATH || '').split(path.delimiter).find((d) => d && fs.existsSync(path.join(d, 'git.exe')));
+let winNodeDir;
+
+// Windows cannot delete a hard link to a running node.exe, so one copy per process is shared and removed on exit.
+function windowsNodeDir() {
+  if (winNodeDir) return winNodeDir;
+  winNodeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adapter-node-'));
+  fs.copyFileSync(process.execPath, path.join(winNodeDir, 'node.exe'));
+  process.on('exit', () => fs.rmSync(winNodeDir, { recursive: true, force: true }));
+  return winNodeDir;
+}
+
 // node's own bin dir may hold globally installed tool CLIs (gemini, opencode): only a node link plus system dirs.
 function isolatedPath() {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'adapter-bin-'));
   if (process.platform === 'win32') {
-    try {
-      fs.linkSync(process.execPath, path.join(bin, 'node.exe'));
-    } catch {
-      fs.copyFileSync(process.execPath, path.join(bin, 'node.exe'));
-    }
-    return [bin, path.join(process.env.SystemRoot || 'C:\\Windows', 'System32')].join(path.delimiter);
+    const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+    return [bin, windowsNodeDir(), GIT_DIR, system32].filter(Boolean).join(path.delimiter);
   }
   fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   return [bin, '/usr/bin', '/bin'].join(path.delimiter);

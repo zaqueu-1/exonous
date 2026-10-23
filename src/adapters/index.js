@@ -53,7 +53,9 @@ function select({ tools = null, all = false, skip = [] } = {}) {
 const SCRIPT_ONLY = 'script self-test (does not prove the tool loads the hook)';
 
 /** First quoted word of a registered hook command: the node binary captured at install. */
-function commandNode(command) {
+function commandNode(command, platform = process.platform) {
+  // cmd.exe quoting has no backslash escapes (shellQuote win32), so a Windows path is taken verbatim.
+  if (platform === 'win32') return /^"([^"]*)"/.exec(command || '')?.[1] ?? null;
   const m = /^"((?:[^"\\]|\\.)*)"/.exec(command || '');
   return m ? m[1].replace(/\\(.)/g, '$1') : null;
 }

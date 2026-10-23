@@ -21,8 +21,10 @@ Esta skill é genérica: não conhece projeto, linguagem nem layout de repo. Tud
 
 As notas ficam num **vault central, fora de qualquer repositório** — nunca dentro do repo em que a sessão rodou.
 
-1. Leia `config.json` ao lado deste arquivo. O campo `sessionsVault` é o caminho absoluto do vault.
-2. Sem `config.json`, sem esse campo, ou caminho inexistente: pergunte o caminho ao usuário com AskUserQuestion, crie a pasta com um `.obsidian/` vazio dentro e grave a resposta em `config.json`.
+1. O vault é o primeiro que existir nesta ordem:
+   - `sessionsVault` do `config.json` ao lado deste arquivo (override opcional desta skill);
+   - `vault` do config unificado do exonous, `~/.claude/exonous/config.json` (definido por `exonous install` ou `exonous vault set <caminho>`; `exonous vault` mostra o atual).
+2. Nenhum dos dois, ou caminho inexistente: rode `exonous vault detect` e pergunte ao usuário com AskUserQuestion qual caminho usar (um detectado ou outro). Grave com `exonous vault set <caminho>`; se o comando `exonous` não existir, crie a pasta com um `.obsidian/` vazio dentro e grave em `sessionsVault` no `config.json` desta skill.
 3. Dentro do vault, cada repositório tem a sua pasta: `<vault>/<nome-do-repo>/`. O nome do repo é o nome da pasta do checkout principal (`git rev-parse --show-toplevel`; em worktree, a primeira linha de `git worktree list`). Fora de um repo, use `avulsas/`.
 4. Crie a pasta do repo se faltar.
 

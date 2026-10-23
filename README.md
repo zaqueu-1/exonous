@@ -19,11 +19,22 @@ exonous install
 
 `exonous install` is the contract and is safe to re-run. Installing the package runs none of its code (no install scripts), so always run `exonous install` after it.
 
-Then point project-memory at your vault once:
+Install also picks the vault agents write notes to, so there is nothing to configure:
+
+- It reads Obsidian's vault registry (macOS, Linux incl. Flatpak and Snap, Windows, and the Windows side from WSL). One vault is used; with several, a terminal asks (default: the open or most recent one), otherwise the most recent wins.
+- Without Obsidian it creates `~/Documents/exonous-vault` (`~/exonous-vault` if there is no `Documents`): plain markdown with `[[wikilinks]]` and an empty `.obsidian/`, so Obsidian can open it later. Uninstall never deletes it.
+- A vault you already configured is kept.
 
 ```bash
-echo '{ "vault": "/absolute/path/to/your/vault" }' > ~/.claude/skills/project-memory/config.json
+exonous vault detect                  # Obsidian registries searched and vaults found
+exonous vault set ~/notes --create    # use another folder
+exonous vault show                    # the vault in use and which setting chose it
+exonous vault graph                   # write .exonous/graph.html + graph.json inside the vault
 ```
+
+`.exonous/graph.html` is a self-contained offline force-directed view of notes, `[[wikilinks]]`, tags and file links (no CDN).
+
+Precedence: `PROJECT_MEMORY_VAULT` > the project-memory skill's `config.json` > `~/.claude/exonous/config.json` (`vault` key, written by install and `exonous vault set`).
 
 ## Platforms
 
@@ -32,7 +43,7 @@ echo '{ "vault": "/absolute/path/to/your/vault" }' > ~/.claude/skills/project-me
 | macOS | full support |
 | Linux | full support; `issue-board` needs Python 3 |
 | Windows (native) | full support; the gate parses `sh`-grammar commands. The first `ui-design` run before the engine is cached refuses arguments containing `"` or `%` |
-| WSL | full support |
+| WSL | full support; detects the Windows-side Obsidian vaults. |
 
 CI runs the test suite on Ubuntu, macOS, Windows and WSL.
 
@@ -108,6 +119,7 @@ Agents (`exo-*`, each fixed to a model tier): `pm`, `cto`, `researcher`, `design
 |---|---|
 | `exonous install` | wire every detected tool. Flags: `--tools a,b` `--all` `--skip-tool a,b` `--permissions` `--rewrite-jsonc` `--dry-run` `--quiet` |
 | `exonous update [--check\|--major]` | update now, report only, or cross a major |
+| `exonous vault [show\|detect\|set <path> [--create]\|graph]` | pick the vault agents keep notes in; `graph` writes `.exonous/graph.html` + `graph.json` inside the vault |
 | `exonous doctor` | per-tool matrix (rules, gate, commands, MCP, update) and every check with its fix |
 | `exonous gate --selftest <tool>` | pipe a fake `git commit` to the registered hook and expect a refusal |
 | `exonous uninstall [--yes\|--dry-run\|--remove-package]` | remove what install wrote; keeps `config.json` and MCP registrations |

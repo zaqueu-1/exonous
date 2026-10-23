@@ -5,6 +5,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -132,15 +133,28 @@ function entryNote(vault, notes) {
   return ranked[0] ? posix(relative(vault, ranked[0])) : null
 }
 
-function latestSessionNote(repoName) {
-  const configPath = join(HERE, '..', 'session-handoff', 'config.json')
-  if (!existsSync(configPath)) return { sessionsVault: null, note: null, reason: 'session-handoff sem config.json' }
-  let sessionsVault
+// Lê `key` de um config.json: { value } (null se ausente) ou { error } se o JSON for inválido.
+function readConfig(configPath, key) {
+  if (!existsSync(configPath)) return { value: null }
   try {
-    sessionsVault = JSON.parse(readFileSync(configPath, 'utf8')).sessionsVault
+    return { value: JSON.parse(readFileSync(configPath, 'utf8'))[key] || null }
   } catch {
-    return { sessionsVault: null, note: null, reason: 'config.json do session-handoff inválido' }
+    return { error: `${configPath} inválido` }
   }
+}
+
+// Ordem: `sessionsVault` do session-handoff > `vault` do config unificado do exonous (mesma base dos hooks).
+function sessionsVaultPath() {
+  const own = readConfig(join(HERE, '..', 'session-handoff', 'config.json'), 'sessionsVault')
+  if (own.error || own.value) return own
+  const unified = readConfig(join(process.env.EXONOUS_HOME || homedir(), '.claude', 'exonous', 'config.json'), 'vault')
+  if (unified.error || unified.value) return unified
+  return { error: 'nenhum vault de sessões: rode `exonous vault detect`' }
+}
+
+function latestSessionNote(repoName) {
+  const { value: sessionsVault, error } = sessionsVaultPath()
+  if (error) return { sessionsVault: null, note: null, reason: error }
   const folder = sessionsVault && join(sessionsVault, repoName)
   if (!folder || !existsSync(folder)) return { sessionsVault, note: null, reason: `sem pasta ${repoName} no vault de sessões` }
   // As notas começam por AAAA-MM-DD HHmm, então a ordem do nome é a ordem do tempo.

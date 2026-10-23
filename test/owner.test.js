@@ -12,12 +12,13 @@ const { test } = require('node:test');
 const fx = require('./helpers/adapter-fixture');
 
 fx.useFixtureHome();
-process.env.GIT_CONFIG_GLOBAL = os.devNull;
+process.env.GIT_CONFIG_GLOBAL = '/dev/null';
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 
 const BIN = path.join(__dirname, '..', 'bin', 'exonous.js');
-const OTHER = String(process.getuid() + 1);
+const OTHER = String((process.getuid?.() ?? 0) + 1);
 const skip = process.platform === 'win32' ? 'no uids' : false;
+const skipAsRoot = skip || (process.getuid() === 0 ? 'runner is root: a root-owned home is its own' : false);
 
 function cli(args, env = {}, cwd = os.tmpdir()) {
   const res = spawnSync(process.execPath, [BIN, ...args], { cwd, env: { ...process.env, ...env }, encoding: 'utf8' });
@@ -47,7 +48,7 @@ test('every writing command refuses when ~/.claude/exonous belongs to another ui
   assert.ok(fs.existsSync(path.join(repo, 'package.json')));
 });
 
-test('root may not write into a home another uid owns, through any writing command', { skip }, () => {
+test('root may not write into a home another uid owns, through any writing command', { skip: skipAsRoot }, () => {
   installed();
   for (const args of [['install', '--quiet'], ['uninstall', '--yes'], ['update']]) {
     const res = cli(args, asRoot);

@@ -10,6 +10,7 @@ const { ensureBiblos } = require('./lib/biblos');
 const { select, ADAPTERS } = require('./adapters');
 const { ASSETS, DESIGN_SKILLS, HOME_SKILLS, sharedSkillDir, foreignSkill, packageVersion, installRuntime, writeInstallInfo, isolatedHome, guardTarget, assertOwner, recordInstallError, clearInstallError } = require('./lib/runtime');
 const legacy = require('./legacy/bridge');
+const { installVault } = require('./vault-cli');
 
 function defaultLog(msg) {
   process.stdout.write(`[exonous] ${msg}\n`);
@@ -59,12 +60,12 @@ function installSharedSkills(home, log) {
 
 /**
  * @param {{ dryRun?: boolean, quiet?: boolean, permissions?: boolean, tools?: string[] | null, all?: boolean, skip?: string[],
- *   external?: boolean, execPath?: string, log?: (msg: string) => void }} [options]
+ *   external?: boolean, execPath?: string, vault?: boolean, vaultChoice?: string | null, log?: (msg: string) => void }} [options]
  * @returns {{ tools: string[] }}
  */
 function install({
   dryRun = false, quiet = false, permissions = false, tools = null, all = false, skip = [], rewriteJsonc = false,
-  external = !isolatedHome(), execPath = process.execPath, realHome = false, log,
+  external = !isolatedHome(), execPath = process.execPath, realHome = false, vault = external, vaultChoice = null, log,
 } = {}) {
   const emit = log || (quiet ? (msg) => { if (/^(WARN|⚠|target home)/.test(msg)) defaultLog(msg); } : defaultLog);
   guardTarget({ action: 'install', dryRun, realHome, log: emit });
@@ -80,6 +81,7 @@ function install({
   step(emit, 'biblos', () => ensureBiblos({ dryRun }));
   step(emit, 'design stack', () => installDesignStack(home, { dryRun, log: emit }));
   step(emit, 'shared skills', () => installSharedSkills(home, emit));
+  if (vault) step(emit, 'vault', () => installVault({ dryRun, log: emit, choice: vaultChoice }));
   if (!step(emit, 'runtime', () => installRuntime(home, { dryRun }))) home.ledger.complete = false;
   const inactive = [];
   for (const adapter of selected) {

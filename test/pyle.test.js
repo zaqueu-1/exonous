@@ -15,7 +15,7 @@ const { repoKey } = require('../assets/machine/hooks/lib/paths.cjs');
 
 const PYLE = path.join(__dirname, '..', 'assets', 'machine', 'hooks', 'pyle.cjs');
 const GIT_DIR = path.dirname(execFileSync('which', ['git'], { encoding: 'utf8' }).trim());
-const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+const GIT_ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, env: { ...process.env, ...GIT_ENV }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 function shim(gitleaks) {
@@ -70,7 +70,7 @@ const claude = (command, cwd) => ({ tool_name: 'Bash', tool_input: { command }, 
 test('the analyzer finds gated git and gh calls anywhere on the line', () => {
   const kinds = (cmd, cwd = '/r') => analyze(cmd, cwd).calls.map((c) => `${c.kind}@${c.cwd}`);
   assert.deepStrictEqual(kinds('git commit -m x'), ['commit@/r']);
-  assert.deepStrictEqual(kinds('git -C sub -c user.name=x commit -m y'), ['commit@/r/sub']);
+  assert.deepStrictEqual(kinds('git -C sub -c user.name=x commit -m y'), [`commit@${path.resolve('/r', 'sub')}`]);
   assert.deepStrictEqual(kinds('cd /w && git add . && git commit -m "a; b" | cat'), ['commit@/w']);
   assert.deepStrictEqual(kinds('cd "/w x" && git push origin HEAD'), ['push@/w x']);
   assert.deepStrictEqual(kinds('gh -R o/r pr create --fill && gh pr new'), ['pr@/r', 'pr@/r']);
