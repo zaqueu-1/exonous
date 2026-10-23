@@ -259,7 +259,7 @@ function ensureAtlas(options = {}) {
   return { ok: false, attempts: MAX_ATTEMPTS };
 }
 
-module.exports = { ensureAtlas, verifySha256, INSTALLERS, RELEASE_CHECKSUMS, ENGINE_RELEASE };
+module.exports = { ensureAtlas, verifySha256, isWsl, INSTALLERS, RELEASE_CHECKSUMS, ENGINE_RELEASE };
 
 if (require.main === module) {
   const result = ensureAtlas({ force: process.argv.includes('--force'), dryRun: process.argv.includes('--dry-run') });
