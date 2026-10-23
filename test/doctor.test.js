@@ -119,3 +119,23 @@ test('the home is never a repo: doctor stays quiet there and migrate refuses it'
   assert.match(res.out, /home directory \(or above it\), not a repo/);
   assert.strictEqual(fs.readdirSync(rules).length, before);
 });
+
+test('the vault row shows the resolved path and where it came from', () => {
+  fs.mkdirSync(fx.home('.claude'));
+  cli(['install', '--quiet']);
+  const fallback = fx.home('exonous-vault');
+  assert.match(cli(['doctor']).out, new RegExp(`✓ vault \\(project memory, handoffs, docs\\) \\(${fallback.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} via exonous-config\\)`));
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'env-vault-'));
+  try {
+    assert.match(cli(['doctor'], { env: { PROJECT_MEMORY_VAULT: elsewhere } }).out, /✓ vault .* via env\)/);
+  } finally {
+    fs.rmSync(elsewhere, { recursive: true, force: true });
+  }
+  fx.write({ vault: path.join(os.tmpdir(), 'no-such-vault-xyz') }, '.claude', 'skills', 'project-memory', 'config.json');
+  const { out } = cli(['doctor']);
+  assert.match(out, /✗ vault .*no-such-vault-xyz via skill-config — missing\)/);
+  assert.match(out, /fix: exonous vault detect, then exonous vault set <path>/);
+  fx.write('{oops', '.claude', 'exonous', 'config.json');
+  fs.rmSync(fx.home('.claude', 'skills', 'project-memory', 'config.json'));
+  assert.match(cli(['doctor']).out, /✗ vault .*not valid JSON/);
+});

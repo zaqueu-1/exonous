@@ -9,6 +9,7 @@ const { onPath } = require('./adapters/shared');
 const { readLedger, sha256 } = require('./lib/home');
 const { DESIGN_SKILLS, packageVersion, readInstallInfo, readInstallError } = require('./lib/runtime');
 const { LEFTOVERS } = require('./legacy/bridge');
+const { current } = require('./vault-cli');
 const selfupdate = require('../assets/machine/hooks/lib/selfupdate.cjs');
 
 const FIX = 'exonous install';
@@ -42,9 +43,21 @@ function updateChecks() {
   ];
 }
 
+function vaultCheck() {
+  const row = { name: 'vault (project memory, handoffs, docs)', fix: 'exonous vault detect, then exonous vault set <path>' };
+  let found;
+  try {
+    found = current();
+  } catch (err) {
+    return { ...row, ok: false, status: err.message };
+  }
+  if (!found.path) return { ...row, ok: false, status: 'not configured' };
+  const exists = fs.existsSync(found.path) && fs.statSync(found.path).isDirectory();
+  return { ...row, ok: exists, status: `${found.path} via ${found.source}${exists ? '' : ' — missing'}` };
+}
+
 function sharedChecks() {
   const info = readInstallInfo();
-  const memoryConfig = readJson(path.join(paths.claudeDir(), 'skills', 'project-memory', 'config.json'));
   const leftovers = LEFTOVERS.filter((rel) => fs.existsSync(path.join(paths.home(), rel)));
   return [
     { name: 'machine install (install.json)', ok: Boolean(info), status: info ? `v${info.version} via ${info.pm}` : '', fix: FIX },
@@ -52,11 +65,7 @@ function sharedChecks() {
     { name: 'design stack', ok: DESIGN_SKILLS.every((s) => fs.existsSync(path.join(paths.home(), '.agents', 'skills', s, 'SKILL.md'))), fix: FIX },
     { name: 'atlas MCP (code graph)', ok: hasMcp('atlas'), fix: 'exonous install (or node <exonous>/src/lib/atlas.js --force)' },
     { name: 'biblos MCP (library docs)', ok: hasMcp('biblos'), fix: 'exonous install' },
-    {
-      name: 'project-memory vault',
-      ok: Boolean(process.env.PROJECT_MEMORY_VAULT || (memoryConfig?.vault && fs.existsSync(memoryConfig.vault))),
-      fix: 'create ~/.claude/skills/project-memory/config.json with { "vault": "<abs path>" }',
-    },
+    vaultCheck(),
     { name: 'no leftovers from older installs', ok: !leftovers.length, status: leftovers.map((r) => `~/${r}`).join(', '), fix: FIX },
   ];
 }
