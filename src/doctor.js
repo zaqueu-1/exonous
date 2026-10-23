@@ -155,7 +155,8 @@ function machineChecks(cwd) {
   if (changed === null) rows.push({ name: 'hook scripts match the install', ok: false, level: 'warn', status: 'no hook entries tracked — reinstall', fix: FIX });
   else rows.push({ name: 'hook scripts match the install', ok: !changed.length, status: changed.length ? `${changed.length} changed: ${changed.join(', ')}` : '', fix: FIX });
   const { hasRepoInstall, loadManifest } = require('./legacy/repo-migrate');
-  if (hasRepoInstall(cwd, loadManifest())) {
+  const inRepo = (paths.gitOut(cwd, ['rev-parse', '--is-inside-work-tree']) || '').trim() === 'true';
+  if (inRepo && hasRepoInstall(cwd, loadManifest())) {
     rows.push({ name: `repo-mode install in ${cwd}`, ok: false, status: 'files from the v2.0.0-era repo install are still here', fix: 'run `exonous migrate` here' });
   }
   return rows;
