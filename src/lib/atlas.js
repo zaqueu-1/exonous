@@ -1,23 +1,24 @@
 #!/usr/bin/env node
 'use strict';
 
-/**
- * Ensure atlas (structural code graph MCP) is installed and registered as `atlas`
- * for Claude Code and Cursor. The engine binary is fetched by its platform installer; exonous owns
- * the registration name so agents, rules and skills only ever reference `atlas`.
- *
- * macOS/Linux: install.sh | Windows: install.ps1 (Unblock-File) | Fallback: npm global
- */
+// Installs the atlas engine from a pinned, checksum-verified release and registers it as `atlas` for Claude Code and Cursor.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync, spawnSync } = require('child_process');
+const { execFileSync, execSync, spawnSync } = require('child_process');
 
 const SERVER_KEY = 'atlas';
 const ENGINE = 'codebase-memory-mcp';
-const ENGINE_INSTALL_SH = `https://raw.githubusercontent.com/DeusData/${ENGINE}/main/install.sh`;
-const ENGINE_INSTALL_PS1 = `https://raw.githubusercontent.com/DeusData/${ENGINE}/main/install.ps1`;
+// Bump together: tag, both installer digests (sha256 of the files at that tag) and the npm fallback version.
+const ENGINE_VERSION = '0.12.1';
+const ENGINE_SOURCE = `https://raw.githubusercontent.com/DeusData/${ENGINE}/v${ENGINE_VERSION}`;
+const ENGINE_RELEASE = `https://github.com/DeusData/${ENGINE}/releases/download/v${ENGINE_VERSION}`;
+const INSTALLERS = {
+  sh: { url: `${ENGINE_SOURCE}/install.sh`, sha256: '13049c7cc51bc508d68b8ecb8a9fd9574ecb7c6f2c9dd5a19bf7d4c187321145' },
+  ps1: { url: `${ENGINE_SOURCE}/install.ps1`, sha256: 'edc5e194702e21b01d38648a25d44d783022bba992b5fb62b08528e2c71ca370' },
+};
 const MAX_ATTEMPTS = 3;
 const ATTEMPT_TIMEOUT_MS = 120000;
 
@@ -110,40 +111,55 @@ function normalizeRegistration(binary, { dryRun = false } = {}) {
   return changed;
 }
 
+function verifySha256(file, expected) {
+  const actual = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  if (actual !== expected) {
+    throw new Error(`${path.basename(file)} checksum mismatch (expected ${expected}, got ${actual}) — refusing to run it`);
+  }
+}
+
+/** Downloads a pinned installer to a private temp dir and runs it only if its digest matches. */
+function withVerifiedInstaller({ url, sha256 }, run) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-'));
+  const file = path.join(dir, path.basename(url));
+  try {
+    execFileSync('curl', ['-fsSL', '--proto', '=https', '--max-redirs', '5', '-o', file, url], {
+      stdio: 'ignore',
+      timeout: ATTEMPT_TIMEOUT_MS,
+    });
+    verifySha256(file, sha256);
+    run(file);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const installerEnv = () => ({ ...process.env, CBM_DOWNLOAD_URL: ENGINE_RELEASE });
+
 function runUnixInstaller() {
-  execSync(`curl -fsSL "${ENGINE_INSTALL_SH}" | bash`, {
-    stdio: 'ignore',
-    shell: true,
-    timeout: ATTEMPT_TIMEOUT_MS,
-    env: process.env,
+  withVerifiedInstaller(INSTALLERS.sh, (script) => {
+    execFileSync('bash', [script], { stdio: 'ignore', timeout: ATTEMPT_TIMEOUT_MS, env: installerEnv() });
   });
 }
 
 function runWindowsInstaller() {
-  const ps1 = path.join(os.tmpdir(), `atlas-install-${Date.now()}.ps1`);
-  const script = [
-    `$ErrorActionPreference = 'Stop'`,
-    `Invoke-WebRequest -Uri '${ENGINE_INSTALL_PS1}' -OutFile '${ps1}'`,
-    `Unblock-File -Path '${ps1}'`,
-    `& '${ps1}'`,
-  ].join('; ');
-
-  const result = spawnSync(
-    'powershell',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { stdio: 'ignore', timeout: ATTEMPT_TIMEOUT_MS, env: process.env }
-  );
-  if (result.status !== 0) {
-    throw new Error(`Windows installer exited with code ${result.status}`);
-  }
+  withVerifiedInstaller(INSTALLERS.ps1, (script) => {
+    const result = spawnSync(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script],
+      { stdio: 'ignore', timeout: ATTEMPT_TIMEOUT_MS, env: installerEnv() }
+    );
+    if (result.status !== 0) throw new Error(`Windows installer exited with code ${result.status}`);
+  });
 }
 
 function runNpmFallback() {
-  const pmCmds = [`npm install -g ${ENGINE}`, `pnpm add -g ${ENGINE}`, `bun add -g ${ENGINE}`];
+  const pkg = `${ENGINE}@${ENGINE_VERSION}`;
+  const pmCmds = [['npm', ['install', '-g', pkg]], ['pnpm', ['add', '-g', pkg]], ['bun', ['add', '-g', pkg]]];
   let lastError;
-  for (const cmd of pmCmds) {
+  for (const [bin, args] of pmCmds) {
     try {
-      execSync(cmd, { stdio: 'ignore', shell: true, timeout: ATTEMPT_TIMEOUT_MS });
+      execFileSync(bin, args, { stdio: 'ignore', shell: process.platform === 'win32', timeout: ATTEMPT_TIMEOUT_MS });
       return;
     } catch (err) {
       lastError = err;
@@ -226,13 +242,13 @@ function ensureAtlas(options = {}) {
   }
 
   emit(`ERROR: atlas install FAILED after ${MAX_ATTEMPTS} attempts`);
-  emit(`  macOS/Linux: curl -fsSL ${ENGINE_INSTALL_SH} | bash && npm run ensure:atlas`);
-  emit(`  Windows:     irm ${ENGINE_INSTALL_PS1} | iex; npm run ensure:atlas`);
+  emit(`  Manual: download ${INSTALLERS.sh.url} (Windows: install.ps1), check its sha256, run it`);
+  emit(`          with CBM_DOWNLOAD_URL=${ENGINE_RELEASE}, then re-run: npx exonous setup`);
   if (lastError?.message) emit(`  Last error: ${lastError.message}`);
   return { ok: false, attempts: MAX_ATTEMPTS };
 }
 
-module.exports = { ensureAtlas };
+module.exports = { ensureAtlas, verifySha256, INSTALLERS, ENGINE_RELEASE };
 
 if (require.main === module) {
   const result = ensureAtlas({ force: process.argv.includes('--force'), dryRun: process.argv.includes('--dry-run') });
