@@ -252,7 +252,7 @@ test('a dev checkout refuses to touch the real home unless asked', () => {
   }
 });
 
-test('setup migrates only a copy inside a git repo that depends on exonous; every other copy installs', () => {
+test('setup runs repo mode only for a copy inside a git repo that depends on exonous; every other copy installs', () => {
   const { execFileSync } = require('child_process');
   const gitInit = (dir) => execFileSync('git', ['init', '-q'], { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
   const real = fs.mkdtempSync(path.join(os.tmpdir(), 'pkg-'));
@@ -261,12 +261,12 @@ test('setup migrates only a copy inside a git repo that depends on exonous; ever
   fs.writeFileSync(path.join(real, 'app', 'package.json'), '{"devDependencies":{"exonous":"github:zaqueu-1/exonous#v2.0.0"}}');
   assert.strictEqual(setupDecision(inRepo), 'install', 'a package.json with no git work tree (pnpm/yarn global dir) installs');
   gitInit(path.join(real, 'app'));
-  assert.strictEqual(setupDecision(inRepo), 'migrate');
+  assert.strictEqual(setupDecision(inRepo), 'repo');
   const legacy = path.join(real, 'old', 'node_modules', '@tron', 'claude-config');
   fs.mkdirSync(legacy, { recursive: true });
   fs.writeFileSync(path.join(real, 'old', 'package.json'), '{"devDependencies":{"@tron/claude-config":"github:x/y"}}');
   gitInit(path.join(real, 'old'));
-  assert.strictEqual(setupDecision(legacy), 'migrate');
+  assert.strictEqual(setupDecision(legacy), 'repo');
   const pnpmGlobal = path.join(real, 'pnpm-global', '5', 'node_modules', 'exonous');
   fs.mkdirSync(pnpmGlobal, { recursive: true });
   fs.writeFileSync(path.join(real, 'pnpm-global', '5', 'package.json'), '{"dependencies":{"exonous":"github:zaqueu-1/exonous"}}');

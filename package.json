@@ -19,6 +19,7 @@
     "bin/",
     "src/",
     "assets/",
+    "scripts/postinstall.js",
     "README.md",
     "docs/cover.svg"
   ]

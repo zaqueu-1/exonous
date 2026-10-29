@@ -150,6 +150,8 @@ function machineChecks(cwd) {
   const failed = readInstallError();
   if (failed) rows.push({ name: 'last install finished', ok: false, status: `${failed.text} (${failed.at}); details in ~/.claude/exonous/state/install.log`, fix: FIX });
   if (info) {
+    const source = require('../assets/machine/hooks/lib/repo.cjs').repoSource(info);
+    rows.push({ name: 'install mode', ok: true, status: source ? `repo — ${source.root}, updates follow ${source.dep.name}@${source.dep.spec}` : 'global' });
     const pmOk = (info.pmPath && fs.existsSync(info.pmPath)) || onPath(info.pm || 'npm');
     rows.push({ name: `package manager (${info.pm}) on PATH`, ok: Boolean(pmOk), status: '', fix: `install ${info.pm} or reinstall exonous with the pm you use` });
     if (info.packageRoot && !fs.existsSync(info.packageRoot)) {
@@ -163,10 +165,10 @@ function machineChecks(cwd) {
   const changed = changedHooks();
   if (changed === null) rows.push({ name: 'hook scripts match the install', ok: false, level: 'warn', status: 'no hook entries tracked — reinstall', fix: FIX });
   else rows.push({ name: 'hook scripts match the install', ok: !changed.length, status: changed.length ? `${changed.length} changed: ${changed.join(', ')}` : '', fix: FIX });
-  const { hasRepoInstall, loadManifest } = require('./legacy/repo-migrate');
+  const { hasRepoFiles } = require('./legacy/repo-migrate');
   const inRepo = (paths.gitOut(cwd, ['rev-parse', '--is-inside-work-tree']) || '').trim() === 'true';
-  if (inRepo && hasRepoInstall(cwd, loadManifest())) {
-    rows.push({ name: `repo-mode install in ${cwd}`, ok: false, status: 'files from the v2.0.0-era repo install are still here', fix: 'run `exonous migrate` here' });
+  if (inRepo && hasRepoFiles(cwd)) {
+    rows.push({ name: `old repo-install files in ${cwd}`, ok: false, status: 'files from the v2.0.0-era repo install are still here', fix: 'run `npx exonous setup` here (keeps the dependency) or `exonous migrate` (drops it)' });
   }
   return rows;
 }

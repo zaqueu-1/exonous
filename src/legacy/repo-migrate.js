@@ -18,7 +18,6 @@ const DESIGN_FILES = ['.cursor/hooks.json', '.github/hooks/ui-design.json', '.gi
 const DESIGN_MARKERS = ['/.agents/skills/ui-design/scripts/', '/skills/tron-design/scripts/tron-design', '/skills/impeccable/scripts/impeccable', '/skills/kallos/scripts/kallos'];
 const KEEP_DIRS = new Set(['.claude', '.github', '.cursor']);
 const LOCKFILES = { npm: ['package-lock.json'], pnpm: ['pnpm-lock.yaml'], bun: ['bun.lock', 'bun.lockb'] };
-const DOCS = 'https://github.com/zaqueu-1/exonous#readme';
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const loadManifest = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'v2-manifest.json'), 'utf8'));
@@ -114,7 +113,12 @@ function isHomeOrAbove(root) {
 /** True when the repo still carries anything a repo-mode install wrote. */
 function hasRepoInstall(root, manifest) {
   if (isHomeOrAbove(root)) return false;
-  if (packageDeps(root).length) return true;
+  return packageDeps(root).length > 0 || hasRepoFiles(root, manifest);
+}
+
+/** True when files a v2.0.0 or tron-era repo install wrote are still in the repo. */
+function hasRepoFiles(root, manifest = loadManifest()) {
+  if (isHomeOrAbove(root)) return false;
   return [...Object.keys(manifest.files).filter((k) => !k.startsWith('git-hooks:')), ...SCOPE_FILES].some((rel) => fs.existsSync(path.join(root, rel)));
 }
 
@@ -391,21 +395,11 @@ function dropDependency(root, { lifecycle, env, log }) {
   }
 }
 
-function notice({ tools, gated }, log) {
-  for (const line of [
-    'exonous is now installed for this machine (triggered by this repo\'s exonous dependency):',
-    `  tools configured: ${tools.join(', ') || 'none'}`,
-    `  gate active for: ${gated.join(', ')} (commits, pushes and PRs need a review first)`,
-    `  read more: ${DOCS}`,
-    '  undo: exonous uninstall (or npx exonous uninstall)',
-  ]) log(line);
-}
-
 /**
- * @param {{ root: string, manifest?: object, env?: NodeJS.ProcessEnv, log?: (m: string) => void, install?: () => { tools: string[] }, trigger?: 'repo'|'cli' }} options
- *   trigger 'repo' (`setup` from a repo's node_modules) honors the opt-outs and announces what it did.
+ * `exonous migrate` only: repo mode (src/repo-mode.js) keeps the dependency.
+ * @param {{ root: string, manifest?: object, env?: NodeJS.ProcessEnv, log?: (m: string) => void, install?: () => { tools: string[] } }} options
  */
-function migrateRepo({ root, manifest = loadManifest(), env = process.env, log = (m) => process.stdout.write(`[exonous] ${m}\n`), install, trigger = 'cli' } = {}) {
+function migrateRepo({ root, manifest = loadManifest(), env = process.env, log = (m) => process.stdout.write(`[exonous] ${m}\n`), install } = {}) {
   const summary = { status: 'nothing', removed: [], keptModified: [], stripped: [], skipped: [], notes: [], trackedRemoved: 0 };
   if (!root || !fs.existsSync(root)) return summary;
   // The repo itself may be reached through a symlink (or /tmp → /private/tmp); only what lies below it is checked.
@@ -426,19 +420,13 @@ function migrateRepo({ root, manifest = loadManifest(), env = process.env, log =
       log(err.message);
       return { ...summary, status: 'refused', reason: err.message };
     }
-    const off = trigger === 'repo' && optedOut(env);
-    if (off) {
-      log(`machine install skipped (${off}); to migrate by hand run \`exonous install\`, then \`exonous migrate\` in ${root}`);
-      return { ...summary, status: 'opted-out', reason: off };
-    }
-    const installed = (install || (() => require('../install').install({ log: (m) => { if (/^(WARN|⚠)/.test(m)) log(m); } })))() || { tools: [] };
+    (install || (() => require('../install').install({ log: (m) => { if (/^(WARN|⚠)/.test(m)) log(m); } })))();
     summary.global = globalAdd(require('../lib/runtime').packageVersion(), { lifecycle, log });
     const gate = machineGate(log);
     if (gate.error) {
       log(`repo left unchanged: ${gate.error} — run \`exonous install\`, then \`exonous migrate\` in ${root}`);
       return { ...summary, status: 'blocked', reason: gate.error };
     }
-    if (trigger === 'repo') notice({ tools: installed.tools || [], gated: gate.gated }, log);
     cleanRepo(root, manifest, summary, log);
     summary.devDependency = dropDependency(root, { lifecycle, env, log });
   } finally {
@@ -449,6 +437,25 @@ function migrateRepo({ root, manifest = loadManifest(), env = process.env, log =
   log(`repo-mode install migrated: ${summary.removed.length} removed, ${summary.keptModified.length} kept, ${summary.stripped.length} config file(s) stripped, devDependency ${summary.devDependency}`);
   if (summary.trackedRemoved) log(`${summary.trackedRemoved} tracked file(s) deleted — commit the cleanup`);
   return { ...summary, status: 'migrated' };
+}
+
+/**
+ * Repo mode keeps the dependency but drops the files the old repo install wrote: their gates and updater would fight the
+ * machine ones. Runs only once the machine gate is verified; edited files are kept and listed.
+ */
+function cleanRepoFiles({ root, manifest = loadManifest(), log }) {
+  const summary = { status: 'nothing', removed: [], keptModified: [], stripped: [], skipped: [], notes: [], trackedRemoved: 0 };
+  root = fs.realpathSync(root);
+  if (!hasRepoFiles(root, manifest)) return summary;
+  const gate = machineGate(() => {});
+  if (gate.error) {
+    log(`WARN: old repo files kept: ${gate.error}`);
+    return { ...summary, status: 'blocked', reason: gate.error };
+  }
+  cleanRepo(root, manifest, summary, log);
+  if (summary.keptModified.length) log(`kept (edited since install, review by hand): ${summary.keptModified.join(', ')}`);
+  log(`old repo-install files replaced by the machine install: ${summary.removed.length} removed${summary.trackedRemoved ? `, ${summary.trackedRemoved} tracked — commit the cleanup` : ''}`);
+  return { ...summary, status: 'cleaned' };
 }
 
 /** The repo that owns a node_modules copy of exonous (first node_modules segment), or null. */
@@ -470,4 +477,4 @@ function migrationRoot(packageRoot, env = process.env) {
   return init && repo && (init === repo || init.startsWith(`${repo}${path.sep}`)) ? init : repo;
 }
 
-module.exports = { migrateRepo, migrationRoot, repoOf, repoPm, hasRepoInstall, loadManifest };
+module.exports = { migrateRepo, migrationRoot, repoOf, repoPm, hasRepoInstall, hasRepoFiles, cleanRepoFiles, optedOut, loadManifest };

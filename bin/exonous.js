@@ -13,7 +13,7 @@ Usage: exonous <command> [flags]
   update        move to the latest release of this major   --check: report only  --major: cross a major
   doctor        check every piece and say how to fix what is missing
   uninstall     remove exonous from this machine            --yes  --dry-run  --verbose  --remove-package
-  migrate       move a repo-mode (v2.0.0 or older) install of this repo to the machine install   --repo <dir>
+  migrate       move this repo from repo mode to the global install and drop the dependency   --repo <dir>
   doctor/gate   exonous gate --selftest <tool>: pipe a fake git commit to the registered hook, expect a deny
 
   token <commit|push>    after review: allow one commit of the staged tree, or one push of HEAD (15 min)
@@ -23,7 +23,7 @@ Usage: exonous <command> [flags]
   validate-pr <file>     check a PR body against the template
   vault [show|detect|set <path> [--create]|graph]   where agents keep notes; graph writes .exonous/graph.html + graph.json
 
-  setup is an alias of install. From a source checkout, install/uninstall need EXONOUS_HOME or --real-home.`;
+  setup is an alias of install; from a repo's node_modules (npx exonous setup) it runs repo mode. From a source checkout, install/uninstall need EXONOUS_HOME or --real-home.`;
 
 function flag(name) {
   return process.argv.includes(`--${name}`);
@@ -38,17 +38,17 @@ const list = (name) => (value(name) ? value(name).split(',').map((s) => s.trim()
 const arg = (i) => process.argv[3 + i];
 const hooksLib = (name) => require(path.join(__dirname, '..', 'assets', 'machine', 'hooks', 'lib', name));
 
-// A copy inside a repo's node_modules is a repo-mode install (the v2.0.0 updater runs `setup` there): migrate it.
-function runRepoMigration(root, trigger = 'cli') {
-  const result = require('../src/legacy/repo-migrate').migrateRepo({ root, trigger });
+function runRepoMigration(root) {
+  const result = require('../src/legacy/repo-migrate').migrateRepo({ root });
   if (result.status === 'nothing') console.log(`[exonous] no repo-mode install found in ${root}`);
   return ['blocked', 'refused'].includes(result.status) ? 1 : 0;
 }
 
 async function runInstall() {
   const runtime = require('../src/lib/runtime');
-  if (process.argv[2] === 'setup' && runtime.setupDecision() === 'migrate') {
-    return runRepoMigration(require('../src/legacy/repo-migrate').migrationRoot(path.join(__dirname, '..')), 'repo');
+  // `setup` from <repo>/node_modules (repo postinstall, v2.0.0 updater, repo-mode self-update) runs repo mode.
+  if (process.argv[2] === 'setup' && runtime.setupDecision() === 'repo') {
+    return require('../src/repo-mode').bootstrap({ quiet: flag('quiet') }).status === 'refused' ? 1 : 0;
   }
   const options = {
     dryRun: flag('dry-run'), quiet: flag('quiet'), permissions: flag('permissions'), tools: list('tools'), all: flag('all'),
