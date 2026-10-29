@@ -19,6 +19,8 @@ const COMMON_RULES_BUDGET = 4000;
 const MIN_RULES_BUDGET = 3072;
 const LEGACY_ZONES = ['src/legacy/', 'maintainer/'];
 const LEGACY_PACKAGE = '@tron/claude-config';
+// The quanthub mirror keeps the old repo name on purpose.
+const LEGACY_MIRROR = 'quanthubbr/tron-claude-config';
 // The tron brand and the Greek skill names that English names replaced.
 const OLD_BRAND = /(?<![a-z])(?:tron|hodos|mneme|graphe|pinax|elenchos|phylax|kallos|kinesis|physis|eikon|kanon)(?![a-z])/i;
 // Vendored design engine: license-bound third-party files, not ours to rename.
@@ -89,7 +91,7 @@ test('skill frontmatter names match their folders', () => {
 test('old names appear only inside the legacy bridge', () => {
   const hits = shipped
     .filter((f) => !LEGACY_ZONES.some((zone) => rel(f).startsWith(zone)))
-    .flatMap((f) => read(f).split('\n').map((line, i) => [line.replaceAll(LEGACY_PACKAGE, ''), i + 1, f]))
+    .flatMap((f) => read(f).split('\n').map((line, i) => [line.replaceAll(LEGACY_PACKAGE, '').replaceAll(LEGACY_MIRROR, ''), i + 1, f]))
     .filter(([line]) => OLD_BRAND.test(line))
     .map(([line, n, f]) => `${rel(f)}:${n}: ${line.trim().slice(0, 100)}`);
   assert.deepStrictEqual(hits, []);
@@ -118,7 +120,7 @@ test('package.json has no install lifecycle scripts, so a git install never runs
   for (const name of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack', 'postpack', 'build']) {
     assert.ok(!(pkg.scripts && name in pkg.scripts), `scripts.${name} must not exist`);
   }
-  assert.ok(!pkg.files.some((f) => /postinstall/.test(f)));
-  assert.ok(!fs.existsSync(path.join(__dirname, '..', 'scripts', 'postinstall.js')));
+  // scripts/postinstall.js ships as a plain file for older repo hooks; no script entry may run it.
+  assert.ok(!Object.values(pkg.scripts || {}).some((cmd) => /postinstall/.test(cmd)));
 });
 

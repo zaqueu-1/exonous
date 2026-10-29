@@ -79,30 +79,12 @@ function guardTarget({ action, dryRun = false, realHome = false, log = () => {} 
 }
 
 /**
- * `exonous setup` (what the v2.0.0 updater runs from <repo>/node_modules/exonous): migrate when this copy sits in a repo
- * that depends on exonous, otherwise it is just `install`.
- * @returns {'migrate'|'install'}
+ * `exonous setup` (run by a repo's postinstall and by the v2.0.0 updater): repo mode when this copy sits in a git repo that
+ * declares exonous, otherwise it is just `install`.
+ * @returns {'repo'|'install'}
  */
 function setupDecision(root = PACKAGE_ROOT) {
-  let real = root;
-  try {
-    real = fs.realpathSync(root);
-  } catch {
-    // keep the given path
-  }
-  const parts = real.split(path.sep);
-  const i = parts.indexOf('node_modules');
-  if (i <= 0) return 'install';
-  let pkg = null;
-  try {
-    pkg = JSON.parse(fs.readFileSync(path.join(parts.slice(0, i).join(path.sep) || path.sep, 'package.json'), 'utf8'));
-  } catch {
-    return 'install';
-  }
-  const declared = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-  if (!['exonous', '@tron/claude-config'].some((name) => name in declared)) return 'install';
-  // pnpm, yarn and bun keep global packages under a package.json of their own; only a git work tree is a repo.
-  return (paths.gitOut(parts.slice(0, i).join(path.sep) || path.sep, ['rev-parse', '--is-inside-work-tree']) || '').trim() === 'true' ? 'migrate' : 'install';
+  return require('../../assets/machine/hooks/lib/repo.cjs').repoOf(root) ? 'repo' : 'install';
 }
 
 function listFiles(dir, base = dir) {

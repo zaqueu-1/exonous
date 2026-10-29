@@ -7,6 +7,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { exoDir, stateDir, redirectedHome, testMode, foreignOwner } = require('./paths.cjs');
 const { RELEASE_REF, compareVersions, listReleases } = require('./release.cjs');
+const repo = require('./repo.cjs');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOCK_STALE_MS = 30 * 60 * 1000;
@@ -146,7 +147,10 @@ function check({ major = false } = {}) {
   if (!info?.version) return { status: 'not-installed' };
   if (info.ref && !RELEASE_REF.test(info.ref)) return { status: 'pinned', from: info.version, ref: info.ref };
   const from = info.version;
-  const releases = listReleases(SOURCE).filter((r) => SHA.test(r.sha));
+  // Repo mode follows the repo's own dependency spec (source and ref), never install.json.
+  const source = repo.repoSource(info);
+  if (source && (repo.pinned(source.ref) || !source.url)) return { status: 'pinned', from, ref: `${source.dep.name}@${source.dep.spec} in ${source.root}`, repo: source.root };
+  const releases = listReleases(source ? source.url : SOURCE).filter((r) => SHA.test(r.sha));
   const sameMajor = releases.filter((r) => r.parts[0] === parts(from)[0]).pop();
   const top = releases[releases.length - 1];
   const result = { status: 'current', from };
@@ -255,18 +259,26 @@ const devCheckout = (info) => typeof info.packageRoot === 'string' && fs.existsS
 
 const detail = (err) => flatten(`${err.message || err}${err.stderr ? ` | ${err.stderr}` : ''}`).slice(0, 4000);
 
-/** @returns {{ warnings: string[], commitVerified: boolean }} */
-function apply(info, decision) {
+/** Global mode: the fixed source at the tag's commit, through the recorded pm. Returns the new package root. */
+function installGlobal(info, decision) {
   const cmd = pmCommand(info);
   const target = spec(decision.sha);
-  if (!VERSION.test(decision.to)) throw new Error(`invalid release version ${decision.to}`);
   pmRun(cmd, cmd.pm === 'npm' ? ['i', '-g', '--no-audit', '--no-fund', target] : ['add', '-g', target]);
+  return globalRoot(cmd);
+}
+
+/** @returns {{ warnings: string[], commitVerified: boolean }} */
+function apply(info, decision) {
+  if (!VERSION.test(decision.to)) throw new Error(`invalid release version ${decision.to}`);
+  const source = repo.repoSource(info);
+  const root = source ? repo.bumpRepo(source, decision.to) : installGlobal(info, decision);
   lockTouch();
-  const root = globalRoot(cmd);
   const { commitVerified } = verifyPackage(root, decision);
   lockTouch();
-  // The hooks under ~/.claude/exonous only change if this install succeeds.
-  const out = execFileSync(process.execPath, [path.join(root, 'bin', 'exonous.js'), 'install', '--quiet'], {
+  // The hooks under ~/.claude/exonous only change if this install succeeds; `setup` from a repo copy keeps repo mode.
+  const out = execFileSync(process.execPath, [path.join(root, 'bin', 'exonous.js'), source ? 'setup' : 'install', '--quiet'], {
+    cwd: source ? source.root : undefined,
+    env: source ? { ...process.env, INIT_CWD: source.root } : process.env,
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10 * 60 * 1000, windowsHide: true,
   });
   const warnings = String(out).split('\n').filter((l) => l.includes('WARN'));

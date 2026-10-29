@@ -131,7 +131,9 @@ async function uninstall({ yes = false, dryRun = false, realHome = false, verbos
   if (!dryRun) pruneEmpty(removed);
   if (!verbose) summarize(removed, log);
   const pm = (info && info.pm) || paths.detectPm(process.env, PACKAGE_ROOT);
-  if (dropPackage && !dryRun) removePackage(info, { log });
+  const repoRoot = require('../assets/machine/hooks/lib/repo.cjs').repoOf(info && info.packageRoot);
+  if (repoRoot) log(`repo mode: drop the exonous dependency from ${repoRoot}/package.json, or its next \`exonous setup\` installs again`);
+  else if (dropPackage && !dryRun) removePackage(info, { log });
   else log(`${dryRun ? 'dry run done. ' : ''}last step: ${pm} ${pm === 'npm' ? 'uninstall' : 'remove'} -g exonous (or rerun with --remove-package)`);
   log('kept: atlas/biblos MCP registrations and your skill config files');
   return 0;

@@ -14,7 +14,8 @@ Everything a maintainer needs; the README is for users. Nothing in this file or 
 | `src/doctor.js`, `src/uninstall.js` | coverage matrix and checks, adapter-aware removal | yes |
 | `src/adapters/` | one module per tool (`claude`, `cursor`, `gemini`, `codex`, `opencode`, `windsurf`, `copilot`, `cline`, `qwen`, `kiro`, `aider`), `index.js` registry and self-test, `shared.js` helpers | yes |
 | `src/lib/` | `home` (ledger), `settings` (JSON hook/MCP merge), `writers/{markers,toml-block}`, `convert/`, `render-rules`, `runtime`, `paths`, `release`, `agents`, `atlas`, `biblos`, `techne` | yes |
-| `src/legacy/repo-migrate.js` + `v2-manifest.json` | repo-mode (v2.0.0 and `@tron/claude-config`) → machine install — **delete in v3.0.0** | yes |
+| `src/repo-mode.js`, `assets/machine/hooks/lib/repo.cjs` | repo mode: machine install from `<repo>/node_modules`, global prevails, updates follow the repo spec; `scripts/postinstall.js` is its entry for older repo hooks (a plain file, never a lifecycle script) | yes |
+| `src/legacy/repo-migrate.js` + `v2-manifest.json` | `exonous migrate` (repo → global) and the cleanup of old repo-install files — **delete in v3.0.0** | yes |
 | `src/legacy/bridge.js` | tron → exonous home cleanup (`migrateHome`) — **lives one more release**, then delete | yes |
 | `assets/rules/nomos.md` | the only always-on rule (byte budget enforced); `render-rules` derives the `no-agents` and `min` variants | yes |
 | `assets/machine/` | what is copied to `~/.claude/exonous`: `hooks/` (`pyle.cjs`, `kairos.cjs`, `lib/*.cjs`, Node builtins only) and `PR-TEMPLATE.md`. Replaces the old `assets/repo/` | yes |
@@ -141,8 +142,8 @@ Shipped content is our own text; provenance lives only in `maintainer/pege/sourc
 
 `src/legacy/repo-migrate.js` and `v2-manifest.json` go in v3.0.0; `bridge.js` (`migrateHome`) lives one release longer than the repo migration is announced, then goes too.
 
-1. Delete `src/legacy/repo-migrate.js`, `src/legacy/v2-manifest.json` and `maintainer/gen-v2-manifest.js`; drop the `migrate` command and the `setup`-inside-`node_modules` branch from `bin/exonous.js`.
-2. Remove `setupDecision` from `src/lib/runtime.js` (`setup` becomes a plain alias of `install`).
-3. In `src/doctor.js`, drop the repo-mode row from `machineChecks` and the leftovers check; in `src/install.js`, once `bridge.js` goes, remove the `legacy` import, its `migrateHome` call and `previous: legacy.previousLedger()`.
+1. Delete `src/legacy/repo-migrate.js`, `src/legacy/v2-manifest.json` and `maintainer/gen-v2-manifest.js`; drop the `migrate` command from `bin/exonous.js` and the `cleanRepoFiles` call from `src/repo-mode.js`. Repo mode itself stays.
+2. Keep `setupDecision` and `scripts/postinstall.js`: repo mode needs them.
+3. In `src/doctor.js`, drop the old-repo-files row from `machineChecks` and the leftovers check; in `src/install.js`, once `bridge.js` goes, remove the `legacy` import, its `migrateHome` call and `previous: legacy.previousLedger()`.
 4. Delete `src/legacy/bridge.js`, `workflow-engine.js` and their tests; in `test/consistency.test.js`, remove the `LEGACY_ZONES` entries and `LEGACY_PACKAGE`.
 5. The `/tron-flow` alias command files disappear from every machine on that release through the ledger.

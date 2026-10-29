@@ -16,7 +16,7 @@ function describe(result, { check = false } = {}) {
   const major = result.newMajor ? ` v${result.newMajor} is a new major — run \`exonous update --major\` to apply it.` : '';
   const messages = {
     'not-installed': 'exonous is not installed on this machine — run `exonous install`.',
-    pinned: `pinned to "${result.ref}" — not updating (reinstall from a release tag to follow releases).`,
+    pinned: `pinned to "${result.ref}" — not updating (${result.repo ? 'point the dependency at a vX.Y.Z tag' : 'reinstall from a release tag'} to follow releases).`,
     'no-release': 'no vX.Y.Z release tag found on the source.',
     current: `up to date (v${result.from}).${major}`,
     available: `update available: v${result.from} → v${result.to}.${check ? ' Run `exonous update` to apply it.' : ''}${major}`,

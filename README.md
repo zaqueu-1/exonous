@@ -8,12 +8,14 @@
 
 Exonous is installed once per machine and active in every project of every supported AI coding tool. It gives agents shared rules, a delivery workflow, anchored memory in your Obsidian vault, and gates on commits, risky pushes and PRs. It writes nothing into your repositories.
 
+Two install modes, both auto-updating: **global** (below, recommended) or **repo** (a devDependency, see [Repo mode](#repo-mode)). A global install always takes precedence.
+
 ## Install
 
 Needs Node 18+ and git.
 
 ```bash
-npm i -g github:zaqueu-1/exonous#v2.1.2     # or: pnpm add -g … / bun add -g …
+npm i -g github:zaqueu-1/exonous#v2.3.0     # or: pnpm add -g … / bun add -g …
 exonous install
 ```
 
@@ -123,31 +125,38 @@ Agents (`exo-*`, each fixed to a model tier): `pm`, `cto`, `researcher`, `design
 | `exonous doctor` | per-tool matrix (rules, gate, commands, MCP, update) and every check with its fix |
 | `exonous gate --selftest <tool>` | pipe a fake `git commit` to the registered hook and expect a refusal |
 | `exonous uninstall [--yes\|--dry-run\|--remove-package]` | remove what install wrote; keeps `config.json` and MCP registrations |
-| `exonous migrate [--repo <dir>]` | move a repo-mode install to the machine install |
+| `exonous setup` | `install`; from a repo copy (`npx exonous setup`), repo mode |
+| `exonous migrate [--repo <dir>]` | move a repo-mode install to the global install and drop the devDependency |
 | `exonous token <commit\|push>` | mint the one-shot token after review |
 | `exonous workflow <commit\|pr>` | print the procedure |
 | `exonous template`, `draft-path`, `validate-pr <file>` | PR template, draft location, body check |
 
 `--permissions` pre-approves only the read-only helpers (`workflow`, `template`, `draft-path`, `validate-pr`) in Claude Code. Doctor's gate self-test proves the script and wiring, not that the tool loads the hook; rows marked `⚠` are things it cannot verify.
 
-## Migrating from repo installs
+## Repo mode
 
-v2.0.0 and `@tron/claude-config` installed as a devDependency and wrote files into each repo. When such a copy installs or updates, it:
+`exonous` or `@tron/claude-config` in a repo's `package.json` keeps working without a global install. The repo copy runs the same machine install (into `~/.claude`, `~/.cursor`, …); nothing is written into the repo.
 
-- runs the machine install and checks the gate hook is registered; if that fails, the repo is left untouched;
-- removes only the files it wrote and that you did not edit (edited ones are kept and listed), and strips only exonous entries from hook configs;
-- removes the devDependency when `package.json` and the lockfile have no other uncommitted changes, otherwise tells you to run `exonous migrate`.
+```bash
+npm i -D github:zaqueu-1/exonous#v2.3.0     # or pnpm add -D / bun add -d
+npx exonous setup
+```
 
-Removed tracked files show up in `git status` for you to commit. `/tron-flow` stays an alias of `/deliver` for one release.
+The package has no install scripts (a git install would run them in a temp clone), so add `"postinstall": "exonous setup"` to the repo's own `scripts` if `npm install` should do it for every teammate. Older repo hooks (v2.0.0 updater, tron-era `bootstrap-check.sh`) already call `setup` or `scripts/postinstall.js` after updating.
+
+- **Global prevails:** when `~/.claude/exonous/install.json` points at a global copy, `setup` from a repo does nothing. A repo copy older than what the machine runs never downgrades it.
+- **Updates:** the daily check follows the repo's dependency spec (its source and `#vX.Y.Z` ref, same major). It rewrites the ref in `package.json`, runs the repo's pm install with scripts disabled, then `setup` from the new copy. It skips while `package.json` or the lockfile has uncommitted changes; a spec pinned to a commit or a branch, or pointing anywhere but `zaqueu-1/exonous` or the `quanthubbr/tron-claude-config` mirror, is not updated. The bump shows up in `git status` for you to commit.
+- **Old repo files:** files a v2.0.0 or tron-era install wrote into the repo would gate commits a second time, so `setup` removes the ones you did not edit (edited ones are kept and listed) once the machine gate is verified. The dependency stays.
+- `exonous migrate` moves a repo to the global install: it also installs globally and drops the devDependency. `/tron-flow` stays an alias of `/deliver` for one release.
 
 ## Privacy and opt-outs
 
-No telemetry. Network use: the daily `git ls-remote` against `github.com/zaqueu-1/exonous`, the package-manager install on update, and, on first install, a checksum-verified download of the atlas engine.
+No telemetry. Network use: the daily `git ls-remote` against `github.com/zaqueu-1/exonous` (repo mode: the source in the dependency spec), the package-manager install on update, and, on first install, a checksum-verified download of the atlas engine.
 
 | Setting | Effect |
 |---|---|
 | `EXONOUS_NO_UPDATE=1`, `CI`, `~/.claude/exonous/config.json` `{"autoUpdate": false}` | no automatic updates |
-| `EXONOUS_NO_INSTALL=1`, `{"autoInstall": false}` | no automatic repo migration |
+| `EXONOUS_NO_INSTALL=1`, `{"autoInstall": false}` | `setup` from a repo copy installs nothing |
 | `{"disabledTools": ["cline"]}` | tools a plain `exonous install` skips |
 | `EXONOUS_HOME=<dir>` | read and write `<dir>` as the home (safe trials; skips global installs) |
 

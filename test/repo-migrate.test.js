@@ -321,29 +321,12 @@ test('any other change to package.json, or any change to a pnpm lockfile, keeps 
   assert.ok(!calls().some((c) => /uninstall|remove/.test(c)));
 });
 
-test('repo-triggered runs honor EXONOUS_NO_INSTALL and autoInstall:false and announce what they did; an explicit migrate ignores the opt-out', () => {
+test('an explicit migrate ignores the repo-mode opt-outs', () => {
   machine();
   shims();
-  const r = repo();
-  const q = quietLogs();
-  const off = migrate(r, { ...q, trigger: 'repo', env: { ...process.env, npm_lifecycle_event: '', EXONOUS_NO_INSTALL: '1' } });
-  assert.strictEqual(off.status, 'opted-out');
-  assert.ok(!fx.exists('.claude', 'exonous', 'hooks'), 'nothing installed');
-  assert.ok(r.exists('.claude/hooks/pyle.sh'));
-  assert.ok(q.logs.some((m) => /machine install skipped \(EXONOUS_NO_INSTALL=1\); to migrate by hand run `exonous install`, then `exonous migrate` in /.test(m)));
   fx.write({ autoInstall: false }, '.claude', 'exonous', 'config.json');
-  assert.strictEqual(migrate(r, { trigger: 'repo' }).status, 'opted-out');
-  const q2 = quietLogs();
-  assert.strictEqual(migrate(r, q2).status, 'migrated', 'cli trigger');
-  fs.rmSync(fx.home('.claude', 'exonous', 'config.json'));
-  const r2 = repo();
-  const q3 = quietLogs();
-  migrate(r2, { ...q3, trigger: 'repo' });
-  const text = q3.logs.join('\n');
-  assert.match(text, /exonous is now installed for this machine/);
-  assert.match(text, /tools configured: claude/);
-  assert.match(text, /gate active for: claude/);
-  assert.match(text, /undo: exonous uninstall/);
+  const r = repo();
+  assert.strictEqual(migrate(r, { env: { ...process.env, npm_lifecycle_event: '', EXONOUS_NO_INSTALL: '1' } }).status, 'migrated');
 });
 
 test('a repo reached through a symlinked path is migrated normally', () => {
@@ -416,7 +399,7 @@ test('the shipped manifest regenerates without a diff', () => {
   assert.deepStrictEqual(build(), shipped);
 });
 
-test('setup from inside a repo node_modules routes to the migration', () => {
+test('setup from inside a repo node_modules runs repo mode: old files cleaned, dependency kept', () => {
   const r = repo();
   const pkg = path.join(r.root, 'node_modules', 'exonous');
   fs.mkdirSync(pkg, { recursive: true });
@@ -428,7 +411,8 @@ test('setup from inside a repo node_modules routes to the migration', () => {
   const env = { ...process.env, INIT_CWD: r.root, npm_lifecycle_event: '' };
   const res = spawnSync(process.execPath, [path.join(pkg, 'bin', 'exonous.js'), 'setup'], { cwd: r.root, env, encoding: 'utf8' });
   assert.strictEqual(res.status, 0, res.stdout + res.stderr);
-  assert.match(res.stdout, /repo-mode install migrated/);
+  assert.match(res.stdout, /old repo-install files replaced by the machine install/);
+  assert.deepStrictEqual(JSON.parse(r.read('package.json')).devDependencies, { exonous: 'github:zaqueu-1/exonous#v2.0.0' });
   assert.ok(!r.exists('.claude/.exonous-scope.json'), 'generated scope file removed');
   assert.ok(r.exists('.claude/hooks/pyle.sh'), 'content unknown to the real manifest is kept');
   assert.deepStrictEqual(JSON.parse(r.read('.claude/settings.json')).hooks, { PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'my-lint' }] }] });
