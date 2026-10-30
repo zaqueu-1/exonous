@@ -92,7 +92,7 @@ exonous workflow commit → /security-review → /code-review → exonous token 
 
 - `git commit` needs a one-shot token for exactly the tree staged at that moment (15 min). Staging at commit time (`-a`, `-p`, pathspecs) is refused. Staged changes are scanned with `gitleaks` when installed.
 - `git push` is free on ordinary branches. A force-push or a push to `main`/`master` needs `exonous token push`; pushing every branch or deleting one is always refused.
-- `gh pr create` needs the PR template's section titles and at most 25 changed files (`exonous template`, `exonous validate-pr <file>`).
+- `gh pr create` needs the PR template's section titles and at most 30 changed files (`exonous template`, `exonous validate-pr <file>`).
 - The gated command must run alone, optionally after one `cd <dir> &&`. A refusal names the next step; tools without commands get the procedure from `exonous workflow commit|pr`.
 - Commits you make in your own terminal are not gated.
 
