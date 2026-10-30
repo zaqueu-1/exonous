@@ -51,6 +51,19 @@ Sessions idle for 6 h are closed into pages automatically. Search them with `pro
 
 The storage format follows the vault. If the vault has `.obsidian/`, links are `[[wikilinks]]`. Otherwise it is a plain folder with standard `[text](file.md)` links. To turn it off, set `EXONOUS_MEMORY=0` or put `"memory": false` in `~/.claude/exonous/config.json`.
 
+## The always-on rules
+
+Two files bind every agent in every supported tool. Neither is invoked; both are already in force, and they ship wherever a tool reads rules from (`~/.claude/rules`, `AGENTS.md`, `GEMINI.md`, `nomos.mdc`/`praxis.mdc`, `global_rules.md`, OpenCode `instructions`, the Cline Rules dir, `QWEN.md`).
+
+- **nomos** — the pillars and their order, terse communication, the engineering and context-economy rules, the verify gate, the git and PR gates, the agent roster.
+- **praxis** — craft discipline per change, in order: make it work → make it right → keep the practice. One decision in one place, a failing test first, parse foreign data where it arrives, reproduce before fixing, restructure under pinned behavior, small ordered commits.
+
+Precedence: a repo's `AGENTS.md`/`CLAUDE.md` wins over both; the scoped rules in `~/.claude/rules/exonous/` win on coding standards.
+
+A static file at the top of a long session decays, so the **ethos** hook restates the set in one line on each prompt submit (Claude Code, Cursor, Gemini CLI, Codex CLI, Copilot). Windsurf and OpenCode only get the files, because neither can return context to the model on that event. Turn the reminder off with `EXONOUS_RULES_REMINDER=0` or `"rulesReminder": false` in `~/.claude/exonous/config.json`.
+
+Install also retires rule files an older home install left in `~/.claude/rules` (they are always loaded and contradict nomos). A file is only retired when its content still matches what that install shipped, and a `.bak` copy is kept; one you edited is left alone and named by `exonous doctor`, along with your own rules.
+
 ## Platforms
 
 | | Notes |
@@ -81,7 +94,7 @@ CI runs the test suite on Ubuntu, macOS, Windows and WSL.
 - **Rules only, not gated:** Cline, Qwen Code, Kiro (Kiro is detect-only). They can commit without a token; install and doctor say so.
 - **Unsupported:** Aider (doctor prints how to add `read:` by hand), Roo.
 - **Codex:** approve the exonous hook in `/hooks`, or the gate stays pending.
-- **Cursor:** User Rules live in its settings; paste `~/.claude/exonous/rules/nomos.md` there (after each release).
+- **Cursor:** User Rules live in its settings; paste `~/.claude/exonous/rules/nomos.md` and `praxis.md` there (after each release).
 - MCP copied to other tools carries only command and arguments or an `https` URL, never headers or env, and nothing that looks like a credential.
 
 ## How the gates work
@@ -104,7 +117,7 @@ Shared skills live in `~/.agents/skills`; the hook runtime in `~/.claude/exonous
 
 | Name | What it does | Use |
 |---|---|---|
-| **nomos** (νόμος) | the single always-on rule, under 4.5 KB | automatic |
+| **nomos** (νόμος), **praxis** (πρᾶξις) | the always-on rules: pillars and gates, craft discipline per change | automatic |
 | **deliver** | classify → plan → execute → verify → close | `/deliver <request>` |
 | **project-memory** | ADRs, plans, docs in the vault, anchored to code | via deliver, or `node ~/.claude/skills/project-memory/project-memory.mjs search "…"` |
 | **commit-changes**, **make-pr** | the only way to commit and open a PR | `/commit-changes`, `/make-pr` |
@@ -118,6 +131,7 @@ Shared skills live in `~/.agents/skills`; the hook runtime in `~/.claude/exonous
 | **pyle** (πύλη) | the commit, push and PR gate | automatic |
 | **metron** (μέτρον) | nudges large whole-file reads toward locate-first (Claude Code) | automatic |
 | **kairos** (καιρός) | shows the update note, starts the daily update | automatic |
+| **ethos** (ἦθος) | restates the always-on rules on each prompt | automatic |
 
 Agents (`exo-*`, each fixed to a model tier): `pm`, `cto`, `researcher`, `designer`, `frontend`, `backend`, `mobile`, `data-ai`, `devops`, `infra`, `qa`, `security`. Every report starts with `{"status":"done|partial|blocked","cause":"…","risks":[…]}`.
 
@@ -171,6 +185,7 @@ No telemetry. Network use: the daily `git ls-remote` against `github.com/zaqueu-
 | `EXONOUS_NO_UPDATE=1`, `CI`, `~/.claude/exonous/config.json` `{"autoUpdate": false}` | no automatic updates |
 | `EXONOUS_NO_INSTALL=1`, `{"autoInstall": false}` | `setup` from a repo copy installs nothing |
 | `{"disabledTools": ["cline"]}` | tools a plain `exonous install` skips |
+| `EXONOUS_RULES_REMINDER=0`, `{"rulesReminder": false}` | no rule reminder on prompt submit |
 | `EXONOUS_HOME=<dir>` | read and write `<dir>` as the home (safe trials; skips global installs) |
 
 ## Maintainers
