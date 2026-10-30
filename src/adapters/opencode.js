@@ -1,6 +1,6 @@
 'use strict';
 
-// OpenCode: gate plugin, nomos via the `instructions` list in opencode.json, mcp entries, commands and exo-* subagents.
+// OpenCode: gate + memory plugin, nomos via the `instructions` list in opencode.json, mcp entries, commands and exo-* subagents.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -30,8 +30,8 @@ function detect() {
 }
 
 /** The plugin with absolute paths baked in as JSON string literals. */
-function renderPlugin({ node, pyle = hook('pyle.cjs'), kairos = hook('kairos.cjs') }) {
-  const values = { __EXONOUS_NODE__: node, __EXONOUS_PYLE__: pyle, __EXONOUS_KAIROS__: kairos };
+function renderPlugin({ node, pyle = hook('pyle.cjs'), kairos = hook('kairos.cjs'), anamnesis = hook('anamnesis.cjs') }) {
+  const values = { __EXONOUS_NODE__: node, __EXONOUS_PYLE__: pyle, __EXONOUS_KAIROS__: kairos, __EXONOUS_ANAMNESIS__: anamnesis };
   return fs.readFileSync(path.join(ASSETS, 'adapters', 'opencode', 'exonous.js'), 'utf8')
     .replace(/"(__EXONOUS_[A-Z]+__)"/g, (_, key) => JSON.stringify(values[key]));
 }
@@ -72,6 +72,14 @@ function uninstall({ dryRun, log }) {
 }
 
 /** Node binary the plugin was generated with, or null when the plugin is missing or foreign. */
+function pluginText() {
+  try {
+    return fs.readFileSync(pluginFile(), 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 function pluginNode() {
   try {
     const m = /^const NODE = ("(?:[^"\\]|\\.)*");$/m.exec(fs.readFileSync(pluginFile(), 'utf8'));
@@ -120,6 +128,7 @@ function doctor() {
   return [
     row('gate plugin (commit, push, pr)', pluginNode() !== null),
     row('nomos rule (instructions)', Array.isArray(config.instructions) && config.instructions.includes(rulesFile()), jsoncOnly() ? 'opencode.jsonc: add it by hand' : ''),
+    row('memory capture (anamnesis)', pluginText().includes('anamnesis.cjs')),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(dir(), 'commands', `${c}.md`)))),
     row('agents exo-*', agents === 12, `${agents}/12 agents`),
     mcpRow('OpenCode', Object.keys(config.mcp || {})),

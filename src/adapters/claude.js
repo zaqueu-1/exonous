@@ -23,12 +23,20 @@ function detect() {
 }
 
 function hookEntries(execPath) {
+  const memory = (event) => hookCommand(execPath, 'anamnesis.cjs', `--event ${event} --adapter claude`);
   return {
     PreToolUse: [
       { matcher: 'Bash', hooks: [{ type: 'command', command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter claude') }] },
       { matcher: 'Read', hooks: [{ type: 'command', command: hookCommand(execPath, 'lib/metron.cjs') }] },
     ],
-    SessionStart: [{ hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter claude') }] }],
+    SessionStart: [
+      { hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter claude') }] },
+      { hooks: [{ type: 'command', command: memory('start') }] },
+    ],
+    UserPromptSubmit: [{ hooks: [{ type: 'command', command: memory('prompt') }] }],
+    PostToolUse: [{ hooks: [{ type: 'command', command: memory('tool') }] }],
+    Stop: [{ hooks: [{ type: 'command', command: memory('stop') }] }],
+    SessionEnd: [{ hooks: [{ type: 'command', command: memory('end') }] }],
   };
 }
 
@@ -177,6 +185,7 @@ function doctor() {
   return [
     row('gate hook (commit, push, pr)', hooks.includes('pyle.cjs') && hooks.includes('auto --adapter claude') && fs.existsSync(path.join(paths.exoDir(), 'hooks', 'pyle.cjs'))),
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter claude')),
+    row('memory hooks (anamnesis)', ['start', 'prompt', 'tool', 'stop', 'end'].every((e) => hooks.includes(`--event ${e} --adapter claude`))),
     row('nomos rule', fs.existsSync(path.join(paths.claudeDir(), 'rules', 'nomos.md'))),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(paths.claudeDir(), 'commands', `${c}.md`)))),
     row('skills', Object.keys(HOME_SKILLS).every((s) => fs.existsSync(path.join(paths.claudeDir(), 'skills', s, 'SKILL.md')))),

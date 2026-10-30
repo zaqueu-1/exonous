@@ -26,9 +26,17 @@ const mcpTables = (log) => Object.fromEntries(Object.entries(claudeMcp({ log }))
 function install({ home, dryRun, log, execPath }) {
   const opts = { tool: TOOL };
   home.section(path.join(dir(), 'AGENTS.md'), renderRules('full'), opts);
+  const memory = (event) => hookCommand(execPath, 'anamnesis.cjs', `--event ${event} --adapter codex`);
   const entries = {
     PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter codex') }] }],
-    SessionStart: [{ hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter codex') }] }],
+    SessionStart: [
+      { hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter codex') }] },
+      { hooks: [{ type: 'command', command: memory('start') }] },
+    ],
+    UserPromptSubmit: [{ hooks: [{ type: 'command', command: memory('prompt') }] }],
+    PostToolUse: [{ hooks: [{ type: 'command', command: memory('tool') }] }],
+    Stop: [{ hooks: [{ type: 'command', command: memory('stop') }] }],
+    SessionEnd: [{ hooks: [{ type: 'command', command: memory('end') }] }],
   };
   mergeOwned(hooksFile(), { format: 'codex', entries, ownedMarker: OWNED_MARKER, dryRun, log });
   const tables = mcpTables(log);
@@ -72,6 +80,7 @@ function doctor() {
     row('gate hook registered (commit, push, pr)', hooks.includes('pyle.cjs') && hooks.includes('--adapter codex')),
     { name: 'Codex CLI: gate approved in /hooks', ok: false, level: 'warn', status: PENDING, fix: 'open Codex, run /hooks and approve the exonous PreToolUse hook' },
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter codex')),
+    row('memory hooks (anamnesis)', hooks.includes('anamnesis.cjs') && hooks.includes('--adapter codex')),
     row('nomos rule (AGENTS.md)', agents.includes('exonous:start')),
     mcpRow('Codex CLI', ['atlas', 'biblos'].filter((k) => new RegExp(`^\\[mcp_servers\\.${k}\\]`, 'm').test(readText(path.join(dir(), 'config.toml'))))),
   ];
