@@ -43,8 +43,10 @@ test('install: inlined nomos section, PreToolUse Bash + SessionStart hooks, MCP 
   assert.deepStrictEqual(hooks.PostToolUse.slice(0, USER_HOOKS.hooks.PostToolUse.length), USER_HOOKS.hooks.PostToolUse);
   assert.match(hooks.PostToolUse.at(-1).hooks[0].command, /anamnesis\.cjs" --event tool --adapter codex$/);
   for (const [event, name] of [['SessionStart', 'start'], ['UserPromptSubmit', 'prompt'], ['Stop', 'stop'], ['SessionEnd', 'end']]) {
-    assert.match(hooks[event].at(-1).hooks[0].command, new RegExp(`anamnesis\\.cjs" --event ${name} --adapter codex$`), event);
+    const commands = hooks[event].flatMap((e) => e.hooks.map((h) => h.command));
+    assert.ok(commands.some((c) => new RegExp(`anamnesis\\.cjs" --event ${name} --adapter codex$`).test(c)), event);
   }
+  assert.ok(hooks.UserPromptSubmit.flatMap((e) => e.hooks).some((h) => /ethos\.cjs" --adapter codex$/.test(h.command)), 'rule reminder on prompt submit');
   assert.strictEqual(hooks.PreToolUse[0].matcher, 'Bash');
   assert.match(hooks.PreToolUse[0].hooks[0].command, /pyle\.cjs" auto --adapter codex$/);
   assert.match(hooks.SessionStart[0].hooks[0].command, /kairos\.cjs" --adapter codex$/);

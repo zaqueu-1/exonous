@@ -2,6 +2,8 @@
 
 Enforced by `exonous`. Pillars, never trade a higher one for a lower one: security → architecture → model governance → quality → token economy → speed. Repo `AGENTS.md`/`CLAUDE.md` win over this file; scoped `.claude/rules/exonous/` win on coding standards.
 
+Always-on set: this file and `praxis.md` (craft discipline per change — make it work, make it right, keep the practice). Both bind every agent; neither is invoked, both are already in force.
+
 ## Communication — terse
 - Cut filler, pleasantries, hedges, restated questions. Fragments ok. Shape: `[subject] [what happens] [why]. [next step].`
 - Quote code, commands, paths, errors and identifiers exactly. Answer in the user's language.

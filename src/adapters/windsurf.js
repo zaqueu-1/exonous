@@ -6,7 +6,7 @@ const path = require('path');
 const paths = require('../lib/paths');
 const markers = require('../lib/writers/markers');
 const { mergeOwned, stripOwned } = require('../lib/settings');
-const { renderRules } = require('../lib/render-rules');
+const { renderAlwaysOn } = require('../lib/render-rules');
 const { OWNED_MARKER, hookCommand } = require('../lib/runtime');
 const { readJson, claudeMcp, mergeMcp, removeMcp, mcpRow } = require('./shared');
 
@@ -41,7 +41,7 @@ function installRules(home, problems) {
     problems.push({ what: 'rules', reason: '~/.codeium/windsurf/memories/global_rules.md does not exist', fix: 'create it (it may be empty) and rerun `exonous install`' });
     return;
   }
-  const body = renderRules('min');
+  const body = renderAlwaysOn('min');
   const next = markers.upsert(fs.readFileSync(file, 'utf8'), body, 'html');
   if (next.status !== 'malformed' && next.text.length > RULES_CAP) {
     problems.push({ what: 'rules', reason: `global_rules.md would exceed Windsurf's ${RULES_CAP}-char cap (${next.text.length})`, fix: 'shorten your global rules, then rerun `exonous install`' });
@@ -56,6 +56,7 @@ function install({ home, dryRun, log, execPath }) {
     const memory = (event) => hookCommand(execPath, 'anamnesis.cjs', `--event ${event} --adapter windsurf`);
     const entries = {
       pre_run_command: [{ command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter windsurf'), show_output: true }],
+      // No ethos reminder: pre_user_prompt has no channel back to the model, so the rules travel only in global_rules.md.
       pre_user_prompt: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter windsurf') }, { command: memory('prompt') }],
       post_write_code: [{ command: memory('tool') }],
       post_run_command: [{ command: memory('tool') }],
@@ -88,10 +89,10 @@ const selftestPayload = (command, cwd) => ({ agent_action_name: 'pre_run_command
 
 // Install skips rules on purpose when the file is missing or would pass the cap; doctor matches that with a warning.
 function rulesRow(rules) {
-  const name = 'Windsurf: nomos min rules (global_rules.md)';
+  const name = 'Windsurf: nomos + praxis min rules (global_rules.md)';
   if (rules.includes('exonous:start')) return { name, ok: true, status: '', fix: 'exonous install' };
   if (!fs.existsSync(rulesFile())) return { name, ok: false, level: 'warn', status: '~/.codeium/windsurf/memories/global_rules.md does not exist', fix: 'create it (it may be empty) and rerun exonous install' };
-  const size = markers.upsert(rules, renderRules('min'), 'html').text.length;
+  const size = markers.upsert(rules, renderAlwaysOn('min'), 'html').text.length;
   if (size > RULES_CAP) return { name, ok: false, level: 'warn', status: `would exceed Windsurf's ${RULES_CAP}-char cap (${size})`, fix: 'shorten your global rules, then exonous install' };
   return { name, ok: false, status: '', fix: 'exonous install' };
 }
