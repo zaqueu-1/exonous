@@ -1,6 +1,6 @@
 'use strict';
 
-// OpenCode: gate + memory plugin, nomos via the `instructions` list in opencode.json, mcp entries, commands and exo-* subagents.
+// OpenCode: gate + memory plugin, nomos and praxis via the `instructions` list in opencode.json, mcp entries, commands and exo-* subagents.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -22,7 +22,9 @@ function configFile() {
   return !fs.existsSync(json) && fs.existsSync(jsonc) ? jsonc : json;
 }
 const pluginFile = () => path.join(dir(), 'plugins', 'exonous.js');
-const rulesFile = () => path.join(paths.exoDir(), 'rules', 'nomos.md');
+const RULES = ['nomos.md', 'praxis.md'];
+const rulesFile = (name = 'nomos.md') => path.join(paths.exoDir(), 'rules', name);
+const ruleFiles = () => RULES.map((name) => rulesFile(name));
 const hook = (name) => path.join(paths.exoDir(), 'hooks', name);
 
 function detect() {
@@ -49,8 +51,8 @@ function install({ home, dryRun, log, execPath, rewriteJsonc = false }) {
   const jsonc = { dryRun, log, jsonc: rewriteJsonc };
   if (jsoncOnly() && !rewriteJsonc) {
     log(`WARN: ${configFile()} is JSONC — exonous edits plain JSON only; file left untouched`);
-    problems.push({ what: 'rules', reason: `${configFile()} is JSONC`, fix: `add "${rulesFile()}" to its "instructions" by hand, or rerun \`exonous install --rewrite-jsonc\`` });
-  } else if (mergeList(configFile(), { key: 'instructions', add: [rulesFile()], ownedMarker: RULES_MARKER, ...jsonc }).status === 'invalid') {
+    problems.push({ what: 'rules', reason: `${configFile()} is JSONC`, fix: `add ${ruleFiles().map((f) => `"${f}"`).join(' and ')} to its "instructions" by hand, or rerun \`exonous install --rewrite-jsonc\`` });
+  } else if (mergeList(configFile(), { key: 'instructions', add: ruleFiles(), ownedMarker: RULES_MARKER, ...jsonc }).status === 'invalid') {
     problems.push({ what: 'rules', reason: `${configFile()} could not be edited (see WARN above)`, fix: 'fix the JSON by hand, or rerun `exonous install --rewrite-jsonc` (drops comments; backup kept)' });
   } else {
     mergeMcp(configFile(), { tool: TOOL, key: 'mcp', entries: mcpEntries(log), ...jsonc });
@@ -127,7 +129,8 @@ function doctor() {
   const row = (name, ok, status = '') => ({ name: `OpenCode: ${name}`, ok, status, fix: 'exonous install' });
   return [
     row('gate plugin (commit, push, pr)', pluginNode() !== null),
-    row('nomos rule (instructions)', Array.isArray(config.instructions) && config.instructions.includes(rulesFile()), jsoncOnly() ? 'opencode.jsonc: add it by hand' : ''),
+    row('nomos + praxis rules (instructions)', Array.isArray(config.instructions) && ruleFiles().every((f) => config.instructions.includes(f)), jsoncOnly() ? 'opencode.jsonc: add them by hand' : ''),
+    // No ethos reminder: the OpenCode plugin API has no verified way to return context to the model.
     row('memory capture (anamnesis)', pluginText().includes('anamnesis.cjs')),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(dir(), 'commands', `${c}.md`)))),
     row('agents exo-*', agents === 12, `${agents}/12 agents`),

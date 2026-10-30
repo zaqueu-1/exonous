@@ -1,6 +1,6 @@
 'use strict';
 
-// Gemini CLI: GEMINI.md imports nomos, BeforeTool gate, SessionStart kairos, anamnesis memory hooks and MCP in settings.json, .toml commands.
+// Gemini CLI: GEMINI.md imports nomos and praxis, BeforeTool gate, SessionStart kairos, anamnesis memory hooks and MCP in settings.json, .toml commands.
 const fs = require('fs');
 const path = require('path');
 const paths = require('../lib/paths');
@@ -12,7 +12,8 @@ const { onPath, readJson, claudeMcp, mergeMcp, removeMcp, mcpRow } = require('./
 const TOOL = 'gemini';
 const dir = () => path.join(paths.home(), '.gemini');
 const settingsFile = () => path.join(dir(), 'settings.json');
-const rulesFile = () => path.join(paths.exoDir(), 'rules', 'nomos.md');
+const RULES = ['nomos.md', 'praxis.md'];
+const rulesFile = (name = 'nomos.md') => path.join(paths.exoDir(), 'rules', name);
 
 function detect() {
   return fs.existsSync(dir()) || onPath('gemini');
@@ -20,8 +21,10 @@ function detect() {
 
 // Gemini resolves `@<path>` imports, absolute paths included; a path with whitespace would not parse, so it is inlined.
 function rulesSection() {
-  const file = rulesFile();
-  return /\s/.test(file) ? fs.readFileSync(path.join(ASSETS, 'rules', 'nomos.md'), 'utf8') : `@${file}`;
+  return RULES.map((name) => {
+    const file = rulesFile(name);
+    return /\s/.test(file) ? fs.readFileSync(path.join(ASSETS, 'rules', name), 'utf8') : `@${file}`;
+  }).join('\n');
 }
 
 const mcpEntries = (log) => Object.fromEntries(Object.entries(claudeMcp({ log }))
@@ -37,7 +40,10 @@ function install({ home, dryRun, log, execPath, rewriteJsonc = false }) {
       { hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter gemini') }] },
       { hooks: [{ type: 'command', command: memory('start') }] },
     ],
-    BeforeAgent: [{ hooks: [{ type: 'command', command: memory('prompt') }] }],
+    BeforeAgent: [
+      { hooks: [{ type: 'command', command: memory('prompt') }] },
+      { hooks: [{ type: 'command', command: hookCommand(execPath, 'ethos.cjs', '--adapter gemini') }] },
+    ],
     AfterTool: [{ hooks: [{ type: 'command', command: memory('tool') }] }],
     AfterAgent: [{ hooks: [{ type: 'command', command: memory('stop') }] }],
     SessionEnd: [{ hooks: [{ type: 'command', command: memory('end') }] }],
@@ -77,6 +83,8 @@ function doctor() {
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter gemini')),
     row('memory hooks (anamnesis)', hooks.includes('anamnesis.cjs') && hooks.includes('--adapter gemini')),
     row('nomos rule (GEMINI.md)', md.includes('exonous:start') && fs.existsSync(rulesFile())),
+    row('praxis rule (GEMINI.md)', md.includes('exonous:start') && fs.existsSync(rulesFile('praxis.md'))),
+    row('rule reminder (ethos)', hooks.includes('ethos.cjs') && hooks.includes('--adapter gemini')),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(dir(), 'commands', `${c}.toml`)))),
     mcpRow('Gemini CLI', Object.keys(readJson(settingsFile())?.mcpServers || {})),
   ];
