@@ -26,7 +26,7 @@ Everything a maintainer needs; the README is for users. Nothing in this file or 
 | `test/` | `npm test` | no |
 | `maintainer/pege/` | upstream provenance, watch and originality gate | no |
 | `maintainer/gen-v2-manifest.js` | regenerates `src/legacy/v2-manifest.json` from the `v2.0.0` tag | no |
-| `maintainer/mirror-sync.sh` | manual push to the quanthub mirror | no |
+| `maintainer/mirror-sync.sh` | run, check or update the quanthub mirror sync | no |
 
 The hook runtime under `assets/machine/hooks/` must stay self-contained: it runs from `~/.claude/exonous/hooks`, never from the global package directory, and uses only Node builtins and its own `lib/`.
 
@@ -136,7 +136,12 @@ Shipped content is our own text; provenance lives only in `maintainer/pege/sourc
 
 ## The quanthub mirror
 
-`quanthubbr/tron-claude-config` mirrors this repo and keeps its name, so quanthub consumers install from there. `.github/workflows/sync-from-upstream.yml` runs only on the mirror. Every day it fast-forwards `main` from `zaqueu-1/exonous` and pushes tags. If this repo is private, add an `UPSTREAM_TOKEN` secret on the mirror. To push manually: `bash maintainer/mirror-sync.sh` (`--check` for a dry run).
+`quanthubbr/tron-claude-config` mirrors this repo and keeps its name, so quanthub consumers install from there. `.github/workflows/sync-from-upstream.yml` runs only on the mirror. Every day it copies `main` and every missing `v*` release tag from `zaqueu-1/exonous` (repo-mode updates of `@tron/claude-config` read those tags).
+
+GitHub never lets `GITHUB_TOKEN` push changes under `.github/workflows/`. So the mirror keeps its own workflows: each sync is a new commit with the upstream tree and the mirror's `.github/workflows`, never a fast-forward. No secret or admin setting is needed. The mirror's history is generated, so fix things here, never on the mirror.
+
+- `bash maintainer/mirror-sync.sh` runs the sync now; `--check` diffs canonical `main` against the mirror, ignoring workflows.
+- After changing `sync-from-upstream.yml` and merging it, run `bash maintainer/mirror-sync.sh --install-workflow` once. It needs push access and the gh `workflow` scope.
 
 ## Removing the bridge (v3.0.0)
 
