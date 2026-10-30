@@ -10,7 +10,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Never cancel a main run: it may be tagging a release.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -89,3 +90,69 @@ jobs:
           export EXONOUS_HOME="$work/exonous-home" HOME="$work/home" EXONOUS_NO_UPDATE=1 GIT_CONFIG_GLOBAL=/dev/null
           mkdir -p "$EXONOUS_HOME" "$HOME"
           node --test test/*.test.js
+
+  version:
+    name: version bump
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Shipped changes raise the version
+        env:
+          BASE: ${{ github.base_ref }}
+        run: node maintainer/release.js check "origin/$BASE"
+
+  release-checks:
+    name: release checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, wsl]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      new: ${{ steps.version.outputs.new }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: New version?
+        id: version
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          if [ -n "$(git tag --list "v$v")" ]; then echo "new=false" >> "$GITHUB_OUTPUT"; echo "v$v already released"; else echo "new=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Pre-release checks
+        if: steps.version.outputs.new == 'true'
+        run: |
+          bash maintainer/e2e-smoke.sh
+          npm run pege:originality
+
+  # Only this job can write, and it runs nothing but the tag step.
+  release:
+    name: release tag
+    needs: release-checks
+    if: needs.release-checks.outputs.new == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # The quanthub mirror copies new tags within the hour (its own sync workflow).
+      - name: Tag the release
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          node maintainer/release.js tag
