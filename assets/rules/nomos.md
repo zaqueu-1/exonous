@@ -33,7 +33,7 @@ Always-on set: this file and `praxis.md` (craft discipline per change — make i
 ## Git and PRs
 - `git commit` only via `/commit-changes`; push and `gh pr create` only via `/make-pr`. Never without an explicit request.
 - Destructive ops (`rm -rf`, `reset --hard`, force-push, clean) need explicit confirmation after inspecting what is lost.
-- PR ≤ 25 changed files; body follows `.claude/PR-TEMPLATE.md`. Conventional commits.
+- PR ≤ 30 changed files; body follows `.claude/PR-TEMPLATE.md`. Conventional commits.
 
 ## Agents
 Only these 12 subagents exist (plus built-ins); others are remapped or blocked by a hook. Tier is fixed per agent: sonnet plans/reviews/researches, opus writes code.
