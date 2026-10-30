@@ -24,7 +24,7 @@ exonous install
 Install also picks the vault agents write notes to, so there is nothing to configure:
 
 - It reads Obsidian's vault registry (macOS, Linux incl. Flatpak and Snap, Windows, and the Windows side from WSL). One vault is used; with several, a terminal asks (default: the open or most recent one), otherwise the most recent wins.
-- Without Obsidian it creates `~/Documents/exonous-vault` (`~/exonous-vault` if there is no `Documents`): plain markdown with `[[wikilinks]]` and an empty `.obsidian/`, so Obsidian can open it later. Uninstall never deletes it.
+- Without Obsidian it creates `~/Documents/exonous-vault` (`~/exonous-vault` if there is no `Documents`): a plain markdown folder with standard links. Opening it in Obsidian later is enough to switch to `[[wikilinks]]`. Uninstall never deletes it.
 - A vault you already configured is kept.
 
 ```bash
@@ -37,6 +37,19 @@ exonous vault graph                   # write .exonous/graph.html + graph.json i
 `.exonous/graph.html` is a self-contained offline force-directed view of notes, `[[wikilinks]]`, tags and file links (no CDN).
 
 Precedence: `PROJECT_MEMORY_VAULT` > the project-memory skill's `config.json` > `~/.claude/exonous/config.json` (`vault` key, written by install and `exonous vault set`).
+
+### Automatic session memory (anamnesis)
+
+Every session is recorded without asking, with no LLM and no API key, in Claude Code, Codex, Gemini CLI, Cursor, Copilot CLI, Windsurf and OpenCode:
+
+1. **Capture**: lifecycle hooks record each prompt, tool name, file path and shell command, after a secret scrubber (API keys, tokens, JWTs, URL credentials, private keys, `*_KEY=`-style values) runs. Tool output is never stored. The raw log stays in `~/.claude/exonous/state/anamnesis/`.
+2. **Consolidate**: at stop and session end, a rule-based page is written to `<vault>/<project>/sessions/<date>-<agent>-<id>.md` (prompts, files touched, tool counts, last commands, an abrupt-ending note) and a line is added to `sessions/log.md`.
+3. **Handoff**: session end leaves one handoff (open questions, next steps, files touched). The next session in that repo, in any agent, receives it once.
+4. **Brief**: at session start the agent gets the pending handoff, an unfinished session that was cut off, and the last 5 sessions. All of it is marked as recorded data, not instructions. Windsurf and OpenCode capture only, because they have no way to pass context back to the agent.
+
+Sessions idle for 6 h are closed into pages automatically. Search them with `project-memory search "<query>" --kind session`.
+
+The storage format follows the vault. If the vault has `.obsidian/`, links are `[[wikilinks]]`. Otherwise it is a plain folder with standard `[text](file.md)` links. To turn it off, set `EXONOUS_MEMORY=0` or put `"memory": false` in `~/.claude/exonous/config.json`.
 
 ## Platforms
 

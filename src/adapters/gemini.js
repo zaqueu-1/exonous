@@ -1,6 +1,6 @@
 'use strict';
 
-// Gemini CLI: GEMINI.md imports nomos, BeforeTool gate + SessionStart kairos and MCP in settings.json, .toml commands.
+// Gemini CLI: GEMINI.md imports nomos, BeforeTool gate, SessionStart kairos, anamnesis memory hooks and MCP in settings.json, .toml commands.
 const fs = require('fs');
 const path = require('path');
 const paths = require('../lib/paths');
@@ -30,9 +30,17 @@ const mcpEntries = (log) => Object.fromEntries(Object.entries(claudeMcp({ log })
 function install({ home, dryRun, log, execPath, rewriteJsonc = false }) {
   const opts = { tool: TOOL };
   home.section(path.join(dir(), 'GEMINI.md'), rulesSection(), opts);
+  const memory = (event) => hookCommand(execPath, 'anamnesis.cjs', `--event ${event} --adapter gemini`);
   const entries = {
     BeforeTool: [{ matcher: 'run_shell_command', hooks: [{ type: 'command', command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter gemini') }] }],
-    SessionStart: [{ hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter gemini') }] }],
+    SessionStart: [
+      { hooks: [{ type: 'command', command: hookCommand(execPath, 'kairos.cjs', '--adapter gemini') }] },
+      { hooks: [{ type: 'command', command: memory('start') }] },
+    ],
+    BeforeAgent: [{ hooks: [{ type: 'command', command: memory('prompt') }] }],
+    AfterTool: [{ hooks: [{ type: 'command', command: memory('tool') }] }],
+    AfterAgent: [{ hooks: [{ type: 'command', command: memory('stop') }] }],
+    SessionEnd: [{ hooks: [{ type: 'command', command: memory('end') }] }],
   };
   const hooks = mergeOwned(settingsFile(), { format: 'gemini', entries, ownedMarker: OWNED_MARKER, dryRun, log, jsonc: rewriteJsonc });
   if (hooks.status !== 'invalid') mergeMcp(settingsFile(), { tool: TOOL, key: 'mcpServers', entries: mcpEntries(log), dryRun, log, jsonc: rewriteJsonc });
@@ -67,6 +75,7 @@ function doctor() {
   return [
     row('gate hook (commit, push, pr)', hooks.includes('pyle.cjs') && hooks.includes('--adapter gemini')),
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter gemini')),
+    row('memory hooks (anamnesis)', hooks.includes('anamnesis.cjs') && hooks.includes('--adapter gemini')),
     row('nomos rule (GEMINI.md)', md.includes('exonous:start') && fs.existsSync(rulesFile())),
     row('commands', COMMANDS.every((c) => fs.existsSync(path.join(dir(), 'commands', `${c}.toml`)))),
     mcpRow('Gemini CLI', Object.keys(readJson(settingsFile())?.mcpServers || {})),

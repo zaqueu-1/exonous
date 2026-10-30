@@ -53,9 +53,13 @@ function installRules(home, problems) {
 function install({ home, dryRun, log, execPath }) {
   const problems = [];
   if (fs.existsSync(hooksFile())) {
+    const memory = (event) => hookCommand(execPath, 'anamnesis.cjs', `--event ${event} --adapter windsurf`);
     const entries = {
       pre_run_command: [{ command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter windsurf'), show_output: true }],
-      pre_user_prompt: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter windsurf') }],
+      pre_user_prompt: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter windsurf') }, { command: memory('prompt') }],
+      post_write_code: [{ command: memory('tool') }],
+      post_run_command: [{ command: memory('tool') }],
+      post_cascade_response: [{ command: memory('stop') }],
     };
     mergeOwned(hooksFile(), { format: 'windsurf', entries, ownedMarker: OWNED_MARKER, dryRun, log });
   } else {
@@ -104,6 +108,7 @@ function doctor() {
   return [
     row('gate hook (pre_run_command)', hooks.includes('pyle.cjs') && hooks.includes('--adapter windsurf'), 'create ~/.codeium/windsurf/hooks.json (e.g. `{}`) and rerun exonous install'),
     row('self-update trigger (pre_user_prompt)', hooks.includes('kairos.cjs')),
+    row('memory hooks (anamnesis)', hooks.includes('anamnesis.cjs') && hooks.includes('--adapter windsurf')),
     rulesRow(rules),
     mcpRow('Windsurf', mcpFiles().flatMap(({ file }) => Object.keys(readJson(file)?.mcpServers || {}))),
     { name: 'Windsurf: config paths', ok: false, level: 'warn', status: 'paths are moving to Devin Desktop (docs.devin.ai); exonous writes only into files that already exist', fix: 'rerun exonous install after Windsurf updates' },

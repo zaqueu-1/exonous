@@ -40,7 +40,11 @@ test('install: inlined nomos section, PreToolUse Bash + SessionStart hooks, MCP 
   assert.ok(agents.startsWith(USER_AGENTS));
   assert.ok(agents.includes(renderRules('full').trim().split('\n')[0]));
   const hooks = fx.readJson('.codex', 'hooks.json').hooks;
-  assert.deepStrictEqual(hooks.PostToolUse, USER_HOOKS.hooks.PostToolUse);
+  assert.deepStrictEqual(hooks.PostToolUse.slice(0, USER_HOOKS.hooks.PostToolUse.length), USER_HOOKS.hooks.PostToolUse);
+  assert.match(hooks.PostToolUse.at(-1).hooks[0].command, /anamnesis\.cjs" --event tool --adapter codex$/);
+  for (const [event, name] of [['SessionStart', 'start'], ['UserPromptSubmit', 'prompt'], ['Stop', 'stop'], ['SessionEnd', 'end']]) {
+    assert.match(hooks[event].at(-1).hooks[0].command, new RegExp(`anamnesis\\.cjs" --event ${name} --adapter codex$`), event);
+  }
   assert.strictEqual(hooks.PreToolUse[0].matcher, 'Bash');
   assert.match(hooks.PreToolUse[0].hooks[0].command, /pyle\.cjs" auto --adapter codex$/);
   assert.match(hooks.SessionStart[0].hooks[0].command, /kairos\.cjs" --adapter codex$/);

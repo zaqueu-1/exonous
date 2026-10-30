@@ -50,9 +50,14 @@ function install({ home, dryRun, log, execPath }) {
     home.write(path.join(paths.cursorDir(), 'skills', name, 'SKILL.md'), withName(content, name), opts);
   }
   installDesignLinks(home, paths.cursorDir(), { dryRun });
+  const memory = (event) => hookCommand(execPath, 'anamnesis.cjs', `--event ${event} --adapter cursor`);
   const gate = {
     beforeShellExecution: [{ command: hookCommand(execPath, 'pyle.cjs', 'auto --adapter cursor') }],
-    sessionStart: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter cursor') }],
+    sessionStart: [{ command: hookCommand(execPath, 'kairos.cjs', '--adapter cursor') }, { command: memory('start') }],
+    beforeSubmitPrompt: [{ command: memory('prompt') }],
+    postToolUse: [{ command: memory('tool') }],
+    stop: [{ command: memory('stop') }],
+    sessionEnd: [{ command: memory('end') }],
   };
   mergeOwned(hooksFile(), { format: 'cursor', entries: gate, ownedMarker: OWNED_MARKER, dryRun, log });
   mergeOwned(hooksFile(), { format: 'cursor', entries: uiDesignEntries(execPath), ownedMarker: '/.agents/skills/ui-design/scripts/', dryRun, log });
@@ -88,6 +93,7 @@ function doctor() {
   return [
     row('gate hook (commit, push, pr)', hooks.includes('pyle.cjs') && hooks.includes('auto --adapter cursor')),
     row('self-update hook (kairos)', hooks.includes('kairos.cjs') && hooks.includes('--adapter cursor')),
+    row('memory hooks (anamnesis)', hooks.includes('anamnesis.cjs') && hooks.includes('--adapter cursor')),
     row('nomos.mdc rule', fs.existsSync(path.join(paths.cursorDir(), 'rules', 'nomos.mdc'))),
     row('skills', COMMANDS.every((c) => fs.existsSync(path.join(paths.cursorDir(), 'skills', c, 'SKILL.md')))),
     mcpRow('Cursor', Object.keys(readJson(path.join(paths.cursorDir(), 'mcp.json'))?.mcpServers || {})),
