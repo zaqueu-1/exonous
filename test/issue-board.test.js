@@ -88,3 +88,23 @@ test('issue-board plain table shows the compact url in place of ID and Repo', ()
   assert.doesNotMatch(out, /│ ID /);
   assert.ok(out.split('\n').every((line) => [...line].length <= 100), out);
 });
+
+test('issue-board --markdown links each issue with a short markdown link', () => {
+  const { root, skill } = setup();
+  const out = run(skill, repoDir(root, 'nuntius', 'git@github.com:org/nuntius.git'), ['--markdown']);
+  assert.match(out, /\| \[#1\]\(https:\/\/github\.com\/org\/nuntius\/issues\/1\) \|/);
+  assert.match(out, /repo nuntius/);
+  assert.doesNotMatch(out, /\x1b|│|github\.com\/org\/nuntius\/issues\/1 /);
+  assert.doesNotMatch(out, /\| Repo \|/);
+});
+
+test('issue-board --markdown shows the repo column across repos and escapes pipes', () => {
+  const { root, skill } = setup();
+  const items = path.join(skill, 'data', 'org-1', 'items.json');
+  const data = JSON.parse(fs.readFileSync(items, 'utf8'));
+  data.items[2].title = 'a | b';
+  fs.writeFileSync(items, JSON.stringify(data));
+  const out = run(skill, repoDir(root, 'plain'), ['--markdown']);
+  assert.match(out, /\| Repo \|/);
+  assert.match(out, /a \\| b/);
+});
