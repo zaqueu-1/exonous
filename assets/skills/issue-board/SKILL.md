@@ -61,7 +61,7 @@ Flags de escopo e filtro (valem para `pending` e `render`):
 
 O cache fica em `data/<owner>-<número>/` dentro da skill compartilhada em `~/.agents/skills/issue-board`; instalações antigas em `~/.claude/skills/issue-board` continuam legíveis. `--skill-dir <pasta>` seleciona outra cópia explicitamente.
 
-A saída do Bash nem sempre aparece para o usuário. Para colar na resposta, rode `exonous issue-board render --markdown` e cole a saída como markdown, fora de bloco de código, exatamente como saiu. Cada issue vira o link curto `[#n](url)`, clicável, e o chat ajusta a largura da tabela. Nunca cole a tabela de bordas no chat: com nome de repo longo, ela passa da largura e quebra.
+A saída do Bash nem sempre aparece para o usuário. Para colar na resposta, rode `exonous issue-board render --markdown` e cole a saída como markdown, fora de bloco de código, exatamente como saiu, sem reformatar. A tabela corta o título para caber em `--width` (padrão 100) e deixa a URL fora; os links vêm numa lista `- #n url` abaixo de cada grupo. Tabela mais larga que o terminal vira lista vertical no Claude Code, então não junte colunas nem ponha a URL de volta. Nunca cole a tabela de bordas no chat.
 
 A tabela de bordas é para o terminal. Com cor, a coluna Link é `↗ abrir`, clicável (OSC 8). Sem cor, ela mostra a URL sem `https://` no lugar das colunas ID e Repo.
 

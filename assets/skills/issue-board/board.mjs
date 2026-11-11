@@ -366,25 +366,41 @@ function difficultyText(r) {
   return (r.difficulty ? '■'.repeat(r.difficulty) + '□'.repeat(3 - r.difficulty) : '—') + (r.difficultySuggested ? '~' : '')
 }
 
-// Para colar no chat: o link curto [#n](url) é clicável e o renderizador de markdown ajusta a largura.
-function renderMarkdown(view) {
+// Tabela mais larga que o terminal vira lista vertical no Claude Code: URL fica fora e o título é cortado.
+function renderMarkdown(view, width) {
   const cell = (text) => String(text).replace(/\|/g, '\\|')
-  const columns = [
+  const len = (text) => [...text].length
+  const others = [
     ['Pri', (r) => r.priority + (r.prioritySuggested ? '~' : '')],
     ['Dif', difficultyText],
-    ['Issue', (r) => (r.url ? `[#${r.number}](${r.url})` : `#${r.number}`)],
+    ['Issue', (r) => `#${r.number}`],
     ...(view.repos?.length === 1 ? [] : [['Repo', (r) => cell(r.repo)]]),
-    ['Título', (r) => cell(r.note ? `${r.title} [${r.note}]` : r.title)],
+  ]
+  const trailing = [
     ['Status', (r) => cell(r.status || '—')],
     ...(view.groupField ? [[cell(view.groupField), (r) => cell(r.group || '—')]] : []),
     ...(view.groupBy !== 'tipo' ? [['Tipo', (r) => cell(r.type)]] : []),
   ]
+  const rows = view.groups.flatMap((g) => g.rows)
+  const fixed = [...others, ...trailing].reduce((sum, [label, get]) => sum + Math.max(len(label), ...rows.map((r) => len(get(r)))), 0)
+  const separators = 3 * (others.length + trailing.length) + 4
+  const titleMax = Math.max(MIN_TITLE_WIDTH, width - fixed - separators)
+  const title = (r) => {
+    const chars = [...(r.note ? `${r.title} [${r.note}]` : r.title)]
+    const cut = (n) => cell(chars.slice(0, n).join('')) + (n < chars.length ? '…' : '')
+    let keep = chars.length > titleMax ? titleMax - 1 : chars.length
+    while (keep > 1 && len(cut(keep)) > titleMax) keep--
+    return cut(keep)
+  }
+  const columns = [...others, ['Título', title], ...trailing]
   const counts = PRIORITIES.map((p) => `${p} ${view.counts[p]}`).join(' · ')
   const out = [`**${view.total} issues** · ${counts}${view.repos ? ` · repo ${view.repos.join(', ')}` : ''}`, '']
   for (const group of view.groups) {
     out.push(`**${cell(group.name)}** (${group.rows.length})`, '')
     out.push(`| ${columns.map(([label]) => label).join(' | ')} |`, `|${columns.map(() => '---|').join('')}`)
     for (const row of group.rows) out.push(`| ${columns.map(([, get]) => get(row)).join(' | ')} |`)
+    out.push('')
+    for (const row of group.rows.filter((r) => r.url)) out.push(`- #${row.number} ${row.url}`)
     out.push('')
   }
   out.push('Dificuldade ■□□ fácil · ■■□ média · ■■■ difícil · ~ = sugestão do agente (campo vazio no board)')
@@ -403,7 +419,7 @@ function cmdRender(config, flags) {
     return
   }
   if (flags.markdown) {
-    console.log(renderMarkdown(view))
+    console.log(renderMarkdown(view, Number(flags.width) || 100))
     return
   }
 
