@@ -258,7 +258,14 @@ jobs:
           if ! npm view "exonous@$v" version >/dev/null 2>&1; then
             npm publish "$package" --ignore-scripts --access public --provenance
           fi
-          published_sri="$(npm view "exonous@$v" dist.integrity)"
+          # The registry takes minutes to serve a fresh version; poll instead of failing on the first 404.
+          published_sri=""
+          for i in $(seq 1 24); do
+            published_sri="$(npm view "exonous@$v" dist.integrity --prefer-online 2>/dev/null || true)"
+            [ -n "$published_sri" ] && break
+            echo "exonous@$v not visible on npm yet ($i/24)"; sleep 15
+          done
+          if [ -z "$published_sri" ]; then echo "exonous@$v never appeared on npm" >&2; exit 1; fi
           if [ "$published_sri" != "$local_sri" ]; then echo "exonous@$v on npm differs from the validated tarball" >&2; exit 1; fi
       - name: Tag verified npm release and publish notes
         env:
