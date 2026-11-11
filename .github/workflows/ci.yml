@@ -106,25 +106,48 @@ jobs:
           mkdir -p "$EXONOUS_HOME" "$HOME"
           node --test test/*.test.js
 
+  # PR: preview the bump. main: commit it (feat → minor, `!`/BREAKING → major, else patch; docs never), later jobs build that sha.
   version:
     name: version bump
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.bump.outputs.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Shipped changes raise the version
+      - name: Preview the bump this PR gets on merge
+        if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.base_ref }}
         run: node maintainer/release.js check "origin/$BASE"
 
+      - name: Bump and push the version
+        id: bump
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          # A newer merge is queued behind this run; its run bumps for both.
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then echo "main moved past $GITHUB_SHA, bump left to its run"; exit 0; fi
+          node maintainer/release.js bump
+          git diff --quiet -- package.json && exit 0
+          v="$(node -p "require('./package.json').version")"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json
+          git commit -m "chore: release v$v"
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   release-checks:
     name: release checks
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, wsl, npm-smoke]
+    needs: [version, test, wsl, npm-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -132,6 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.version.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -169,11 +193,13 @@ jobs:
 
   npm-package:
     name: pack npm package
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ needs.version.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
@@ -229,7 +255,7 @@ jobs:
 
   release:
     name: publish npm then release notes
-    needs: [release-checks, npm-package, npm-smoke]
+    needs: [version, release-checks, npm-package, npm-smoke]
     if: needs.release-checks.outputs.new == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -239,6 +265,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ needs.version.outputs.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
